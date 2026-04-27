@@ -7,39 +7,32 @@
     <style>
         * { margin: 0; padding: 0; box-sizing: border-box; }
         body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; background: #1a1b26; color: #a9b1d6; min-height: 100vh; }
-        .container { max-width: 1200px; margin: 0 auto; padding: 20px; }
+        .container { max-width: 1400px; margin: 0 auto; padding: 16px; }
 
-        h1 { color: #7aa2f7; margin-bottom: 16px; font-size: 1.8rem; }
+        h1 { color: #7aa2f7; font-size: 1.4rem; margin-bottom: 8px; }
 
-        /* VRAM Panel */
-        .vram-panel {
+        /* Combined Header Panel */
+        .header-panel {
             background: #24283b; border: 1px solid #414868; border-radius: 8px;
-            padding: 16px; margin-bottom: 20px; cursor: pointer; position: relative;
+            padding: 12px 16px; margin-bottom: 10px;
         }
-        .vram-panel:hover { background: #292e42; }
-        .vram-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px; }
-        .vram-title { font-weight: bold; color: #7aa2f7; }
-        .vram-refresh-hint { font-size: 0.8rem; color: #565f89; }
-        .vram-content { display: grid; gap: 8px; }
-        .gpu-row { background: #1a1b26; border-radius: 6px; padding: 12px; display: flex; justify-content: space-between; align-items: center; }
-        .gpu-name { font-weight: bold; color: #c0caf5; }
-        .gpu-stats { display: flex; gap: 20px; font-size: 0.9rem; }
+        .header-top { display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px; }
+        .gpu-stats { display: flex; gap: 16px; font-size: 0.85rem; flex-wrap: wrap; }
+        .gpu-stat { color: #a9b1d6; }
         .gpu-stat span { color: #7aa2f7; font-weight: bold; }
-        .vram-bar { width: 150px; height: 8px; background: #414868; border-radius: 4px; overflow: hidden; display: inline-block; vertical-align: middle; margin-left: 8px; }
-        .vram-bar-fill { height: 100%; background: linear-gradient(90deg, #7aa2f7, #bb9af7); border-radius: 4px; transition: width 0.3s; }
 
         /* Controls */
-        .controls { display: flex; gap: 10px; margin-bottom: 16px; align-items: center; }
+        .controls { display: flex; gap: 8px; margin-bottom: 10px; align-items: center; }
         input[type="text"] {
-            background: #24283b; border: 1px solid #414868; color: #c0caf5; padding: 8px 14px;
-            border-radius: 6px; font-size: 0.9rem; flex: 1; outline: none;
+            background: #24283b; border: 1px solid #414868; color: #c0caf5; padding: 7px 12px;
+            border-radius: 6px; font-size: 0.85rem; flex: 1; outline: none;
         }
         input[type="text"]:focus { border-color: #7aa2f7; }
 
         /* Buttons */
         .btn {
-            padding: 8px 16px; border: none; border-radius: 6px; cursor: pointer;
-            font-size: 0.85rem; font-weight: bold; transition: all 0.2s; white-space: nowrap;
+            padding: 6px 12px; border: none; border-radius: 6px; cursor: pointer;
+            font-size: 0.8rem; font-weight: bold; transition: all 0.2s; white-space: nowrap;
         }
         .btn-primary { background: #7aa2f7; color: #1a1b26; }
         .btn-primary:hover { background: #5d8ae9; }
@@ -47,86 +40,79 @@
         .btn-success:hover { background: #8abf5b; }
         .btn-danger { background: #f7768e; color: #1a1b26; }
         .btn-danger:hover { background: #e0647c; }
-        .btn-small { padding: 5px 10px; font-size: 0.8rem; }
+        .btn-small { padding: 4px 8px; font-size: 0.75rem; }
         .btn:disabled { opacity: 0.4; cursor: not-allowed; }
 
         /* Model Table */
-        .model-table { width: 100%; border-collapse: collapse; }
-        .model-table th { text-align: left; padding: 12px; background: #24283b; color: #7aa2f7; font-size: 0.85rem; text-transform: uppercase; letter-spacing: 0.5px; position: sticky; top: 0; }
+        .model-table { width: 100%; border-collapse: collapse; font-size: 0.85rem; }
+        .model-table th { text-align: left; padding: 8px 10px; background: #24283b; color: #7aa2f7; font-size: 0.75rem; text-transform: uppercase; letter-spacing: 0.5px; cursor: pointer; user-select: none; position: sticky; top: 0; }
         .model-table th:first-child { border-radius: 8px 0 0 0; }
         .model-table th:last-child { border-radius: 0 8px 0 0; }
-        .model-table td { padding: 12px; border-bottom: 1px solid #2f354b; vertical-align: top; }
+        .model-table th:hover { background: #292e42; }
+        .model-table td { padding: 6px 10px; border-bottom: 1px solid #2f354b; vertical-align: middle; }
         .model-row { background: #1a1b26; transition: background 0.2s; }
         .model-row:hover { background: #24283b; }
-        .model-name { color: #c0caf5; font-weight: bold; cursor: pointer; }
-        .model-path { display: block; font-size: 0.75rem; color: #565f89; margin-top: 2px; word-break: break-all; }
+        .model-row.running-row { background: #1a2e1a; }
+        .model-name { color: #c0caf5; font-weight: bold; cursor: pointer; font-size: 0.85rem; }
+        .model-path { display: block; font-size: 0.7rem; color: #565f89; margin-top: 1px; word-break: break-all; max-width: 400px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+        .model-path:hover { white-space: normal; }
 
         /* Config Panel */
         .config-panel {
-            background: #24283b; border-radius: 8px; padding: 16px; margin: 10px 0;
-            display: none; border: 1px solid #414868;
+            background: #24283b; border-radius: 6px; padding: 10px; margin-top: 4px;
+            display: none; border: 1px solid #414868; font-size: 0.8rem;
         }
         .config-panel.visible { display: block; }
-        .config-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); gap: 12px; margin-bottom: 12px; }
-        .form-group label { display: block; font-size: 0.8rem; color: #7aa2f7; margin-bottom: 4px; }
-        .form-group input {
+        .config-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(180px, 1fr)); gap: 8px; margin-bottom: 8px; }
+        .form-group label { display: flex; align-items: center; gap: 4px; font-size: 0.75rem; color: #7aa2f7; margin-bottom: 2px; }
+        .form-group input[type="number"], .form-group input[type="text"] {
             width: 100%; background: #1a1b26; border: 1px solid #414868; color: #c0caf5;
-            padding: 6px 10px; border-radius: 4px; font-size: 0.9rem; outline: none;
+            padding: 4px 8px; border-radius: 4px; font-size: 0.8rem; outline: none;
         }
         .form-group input:focus { border-color: #7aa2f7; }
+        .toggle-label { display: flex; align-items: center; gap: 3px; cursor: pointer; color: #a9b1d6; font-size: 0.75rem; }
+        .toggle-label input[type="checkbox"] { accent-color: #7aa2f7; width: 14px; height: 14px; }
+        .form-group.disabled input:not([type="checkbox"]) { opacity: 0.3; }
 
         /* Status */
-        .status { display: inline-block; padding: 3px 10px; border-radius: 12px; font-size: 0.8rem; font-weight: bold; }
+        .status { display: inline-block; padding: 2px 8px; border-radius: 10px; font-size: 0.7rem; font-weight: bold; white-space: nowrap; }
         .status-stopped { background: #414868; color: #a9b1d6; }
         .status-running { background: #9ece6a; color: #1a1b26; animation: pulse 2s infinite; }
 
         @keyframes pulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.7; } }
 
         /* Spinner */
-        .spinner { display: inline-block; width: 14px; height: 14px; border: 2px solid transparent; border-top-color: currentColor; border-radius: 50%; animation: spin 0.6s linear infinite; vertical-align: middle; margin-right: 6px; }
+        .spinner { display: inline-block; width: 12px; height: 12px; border: 2px solid transparent; border-top-color: currentColor; border-radius: 50%; animation: spin 0.6s linear infinite; vertical-align: middle; margin-right: 4px; }
         @keyframes spin { to { transform: rotate(360deg); } }
 
-        .no-models { text-align: center; padding: 40px; color: #565f89; font-size: 1.1rem; }
-
-        /* Log output */
-        .log-panel { background: #24283b; border-radius: 8px; padding: 12px; margin-top: 10px; max-height: 200px; overflow-y: auto; font-family: monospace; font-size: 0.8rem; color: #73daca; display: none; }
-        .log-panel.visible { display: block; }
-
-        /* Auto-refresh indicator */
-        .auto-refresh-dot { width: 8px; height: 8px; border-radius: 50%; background: #9ece6a; display: inline-block; margin-right: 6px; animation: pulse 2s infinite; }
+        .no-models { text-align: center; padding: 30px; color: #565f89; font-size: 1rem; }
     </style>
 </head>
 <body>
 <div class="container">
     <h1>🦙 Llama Runner</h1>
 
-    <!-- VRAM Panel -->
-    <div class="vram-panel" onclick="refreshVRAM()" title="Click to refresh VRAM">
-        <div class="vram-header">
-            <span class="vram-title"><span class="auto-refresh-dot"></span>GPU Memory</span>
-            <span class="vram-refresh-hint">Auto-updates every 5s · Click to refresh now</span>
-        </div>
-        <div id="vram-content" class="vram-content">Loading...</div>
+    <!-- Combined Header: GPU + Search -->
+    <div class="header-panel" onclick="refreshVRAM()" title="Click to refresh VRAM">
+        <div id="vram-content" class="gpu-stats">Loading...</div>
     </div>
 
-    <!-- Controls -->
     <div class="controls">
-        <input type="text" id="search-input" placeholder="🔍 Filter models by name..." oninput="filterModels()">
-        <button class="btn btn-primary" onclick="refreshModels()">⟳ Refresh Models</button>
+        <input type="text" id="search-input" placeholder="🔍 Filter models..." oninput="renderModels()">
+        <button class="btn btn-primary" onclick="refreshModels()">⟳ Refresh</button>
     </div>
 
     <!-- Model List -->
     <table class="model-table">
         <thead>
             <tr>
-                <th style="width:40%">Model</th>
-                <th style="width:15%">Status</th>
-                <th style="width:15%">Port</th>
-                <th style="width:30%">Actions</th>
+                <th style="width:45%" onclick="setSort('name')">Name ↕</th>
+                <th style="width:12%" onclick="setSort('date')">Date ↕</th>
+                <th style="width:10%">Status</th>
+                <th style="width:33%">Actions</th>
             </tr>
         </thead>
-        <tbody id="model-list">
-        </tbody>
+        <tbody id="model-list"></tbody>
     </table>
 
     <div id="no-models" class="no-models" style="display:none;">No models found. Check MODEL_DIR configuration.</div>
@@ -135,13 +121,15 @@
 <script>
 let allModels = [];
 let runningModels = {};
-let savedParamsCache = {};  // path -> params (from server)
+let savedParamsCache = {};
+let sortField = 'name';
+let sortDir = 1;   // 1 = asc, -1 = desc
 let vramInterval = null;
+const modelOrderMap = {};  // path -> original index (for stable re-insertion)
 
 document.addEventListener('DOMContentLoaded', () => {
     refreshVRAM();
     loadModelsAndStatus();
-    // Auto-refresh VRAM every 5 seconds
     vramInterval = setInterval(refreshVRAM, 5000);
 });
 
@@ -164,16 +152,9 @@ function renderVRAM(data) {
     let html = '';
     for (const gpu of data.gpus) {
         const pct = Math.round(gpu.used * 100 / gpu.total);
-        html += `<div class="gpu-row">
-            <span class="gpu-name">${gpu.name}</span>
-            <div class="gpu-stats">
-                <span class="gpu-stat">VRAM: <span>${gpu.used}GB</span> / ${gpu.total}GB
-                    <span class="vram-bar"><span class="vram-bar-fill" style="width:${pct}%"></span></span>
-                </span>
-                <span class="gpu-stat">Temp: <span>${gpu.temp}°C</span></span>
-                <span class="gpu-stat">Power: <span>${gpu.power}W</span></span>
-            </div>
-        </div>`;
+        html += `<div class="gpu-stat"><strong>${gpu.name}</strong> · ${gpu.used}GB/${gpu.total}GB `;
+        html += `<span style="display:inline-block;width:60px;height:5px;background:#414868;border-radius:3px;overflow:hidden;vertical-align:middle;"><span style="display:block;height:100%;width:${pct}%;background:linear-gradient(90deg,#7aa2f7,#bb9af7);"></span></span>`;
+        html += ` · ${gpu.temp}°C · ${gpu.power}W</div>`;
     }
     el.innerHTML = html;
 }
@@ -185,16 +166,127 @@ async function loadModelsAndStatus() {
             fetch('/api/status')
         ]);
         allModels = await modelsResp.json();
+        // Assign original indices for stable ordering
+        allModels.forEach((m, i) => { modelOrderMap[m.path] = i; });
         const status = await statusResp.json();
         runningModels = {};
         for (const m of status.running) {
             runningModels[m.path] = m;
         }
         renderModels();
-    } catch (e) {
-        console.error('Failed to load models:', e);
-    }
+    } catch (e) { console.error('Failed to load:', e); }
 }
+
+function setSort(field) {
+    if (sortField === field) sortDir *= -1;
+    else { sortField = field; sortDir = 1; }
+    renderModels();
+}
+
+function getSortedFiltered() {
+    const filter = document.getElementById('search-input').value.toLowerCase();
+    let filtered = allModels.filter(m => m.name.toLowerCase().includes(filter) || (m.path && m.path.toLowerCase().includes(filter)));
+
+    // Sort
+    filtered.sort((a, b) => {
+        if (sortField === 'name') return a.name.localeCompare(b.name) * sortDir;
+        if (sortField === 'date') {
+            const da = a.mtime || 0;
+            const db = b.mtime || 0;
+            return (da - db) * sortDir;
+        }
+        return 0;
+    });
+
+    // Pin running models to top while preserving relative order within groups
+    const running = filtered.filter(m => runningModels[m.path]);
+    const stopped = filtered.filter(m => !runningModels[m.path]);
+
+    return { running, stopped };
+}
+
+function renderModels() {
+    const tbody = document.getElementById('model-list');
+    const { running, stopped } = getSortedFiltered();
+    const all = [...running, ...stopped];
+
+    if (allModels.length === 0) {
+        tbody.innerHTML = '';
+        document.getElementById('no-models').style.display = 'block';
+        return;
+    }
+
+    if (all.length === 0) {
+        tbody.innerHTML = '<tr><td colspan="4" style="text-align:center;color:#565f89;padding:20px;">No models match filter</td></tr>';
+        document.getElementById('no-models').style.display = 'none';
+        return;
+    }
+
+    document.getElementById('no-models').style.display = 'none';
+    let html = '';
+    for (const model of all) {
+        const running = runningModels[model.path];
+        const statusClass = running ? 'status-running' : 'status-stopped';
+        const statusText = running ? `● ${MODEL_PORT}` : '○ Stopped';
+        const isRunning = !!running;
+        const rowClass = isRunning ? 'model-row running-row' : 'model-row';
+        const h = hashStr(model.path);
+
+        html += `<tr class="${rowClass}">`;
+        html += `<td>`;
+        html += `<span class="model-name" onclick="toggleConfig('${escAttr(model.path)}')">${model.name}</span>`;
+        if (model.split_parts) html += ` <span style="font-size:0.65rem;color:#bb9af7;">(${model.split_parts} parts)</span>`;
+        html += `<span class="model-path" title="${escAttr(model.path)}">${model.path}</span>`;
+
+        // Config panel inline
+        html += `<div id="config-${h}" class="config-panel">`;
+        for (const field of ['ctx_size', 'temp', 'cache_type_k', 'cache_type_v', 'n_gpu_layers']) {
+            const label = { ctx_size: 'Context (k)', temp: 'Temp', cache_type_k: 'Cache K', cache_type_v: 'Cache V', n_gpu_layers: 'GPU Layers' }[field];
+            const inputType = (field === 'cache_type_k' || field === 'cache_type_v') ? 'text' : 'number';
+            const stepAttr = field === 'temp' ? 'step="0.1"' : '';
+            html += `<div class="form-group" id="fg-${h}-${field}">`;
+            html += `<label class="toggle-label"><input type="checkbox" checked onchange="toggleField('${h}','${field}',this.checked)">${label}</label>`;
+            if (inputType === 'number') {
+                html += `<input type="${inputType}" id="${field}-${h}" ${stepAttr}>`;
+            } else {
+                html += `<input type="${inputType}" id="${field}-${h}">`;
+            }
+            html += `</div>`;
+        }
+        html += `<div style="display:flex;gap:6px;margin-top:4px;">`;
+        if (isRunning) {
+            html += `<button class="btn btn-danger btn-small" onclick="stopModel('${escAttr(model.path)}')">⏹ Stop</button>`;
+        } else {
+            html += `<button class="btn btn-success btn-small" onclick="runFromConfig('${escAttr(model.path)}', '${h}')">▶ Run</button>`;
+        }
+        html += `<button class="btn btn-primary btn-small" onclick="saveAndShowParams('${escAttr(model.path)}', '${h}')">💾 Save</button>`;
+        html += `<span id="msg-${h}" style="color:#73daca;font-size:0.75rem;"></span>`;
+        html += `</div></div></td>`;
+
+        // Status column
+        html += `<td><span class="status ${statusClass}">${statusText}</span></td>`;
+
+        // Date column
+        const mtime = model.mtime ? new Date(model.mtime).toLocaleDateString() : '—';
+        html += `<td style="color:#565f89;font-size:0.75rem;">${mtime}</td>`;
+
+        // Actions column
+        html += `<td style="display:flex;gap:4px;flex-wrap:wrap;">`;
+        html += `<button class="btn btn-primary btn-small" onclick="toggleConfig('${escAttr(model.path)}')">⚙ Config</button>`;
+        if (isRunning) {
+            html += `<button class="btn btn-danger btn-small" onclick="stopModel('${escAttr(model.path)}')">⏹ Stop</button>`;
+        } else {
+            html += `<button class="btn btn-success btn-small" onclick="runWithSaved('${escAttr(model.path)}', '${h}')">▶ Run</button>`;
+        }
+        html += `</td></tr>`;
+    }
+    tbody.innerHTML = html;
+}
+
+function hashStr(s) { let h = 0; for (let i = 0; i < s.length; i++) { h = ((h << 5) - h) + s.charCodeAt(i); h |= 0; } return Math.abs(h).toString(36); }
+const MODEL_PORT = ${PORT};
+
+function escAttr(s) { return s.replace(/'/g, "\\'").replace(/"/g, '"'); }
 
 async function _loadParamsForModel(path) {
     if (savedParamsCache[path]) return savedParamsCache[path];
@@ -203,150 +295,88 @@ async function _loadParamsForModel(path) {
         const data = await resp.json();
         savedParamsCache[path] = data;
         return data;
-    } catch {
-        return null;
-    }
+    } catch { return null; }
 }
 
 async function _saveParamsForModel(path, params) {
     try {
         const resp = await fetch('/api/models/params', { method: 'POST', headers: {'Content-Type':'application/json'}, body: JSON.stringify({ path, ...params }) });
         const data = await resp.json();
-        if (data.ok) {
-            savedParamsCache[path] = { ...savedParamsCache[path], ...params };
-            return true;
-        }
+        if (data.ok) { savedParamsCache[path] = { ...savedParamsCache[path], ...params }; return true; }
     } catch {}
     return false;
 }
 
-function renderModels() {
-    const tbody = document.getElementById('model-list');
-    const filter = document.getElementById('search-input').value.toLowerCase();
-    const filtered = allModels.filter(m => m.name.toLowerCase().includes(filter) || m.path.toLowerCase().includes(filter));
-
-    if (filtered.length === 0 && allModels.length > 0) {
-        tbody.innerHTML = '';
-        document.getElementById('no-models').style.display = 'none';
-        return;
+function toggleField(h, field, checked) {
+    const fg = document.getElementById(`fg-${h}-${field}`);
+    if (fg) {
+        fg.classList.toggle('disabled', !checked);
+        const input = fg.querySelector('input:not([type="checkbox"])');
+        if (input) input.disabled = !checked;
     }
-
-    if (allModels.length === 0) {
-        tbody.innerHTML = '';
-        document.getElementById('no-models').style.display = 'block';
-        return;
-    }
-
-    document.getElementById('no-models').style.display = 'none';
-    let html = '';
-    for (const model of filtered) {
-        const running = runningModels[model.path];
-        const statusClass = running ? 'status-running' : 'status-stopped';
-        const statusText = running ? `Running (${running.port})` : 'Stopped';
-        const isRunning = !!running;
-
-        html += `<tr class="model-row" data-name="${model.name.toLowerCase()}">
-            <td>
-                <span class="model-name" onclick="toggleConfig('${model.path.replace(/'/g, "\\'")}')">${model.name}</span>
-                ${model.split_parts ? `<span style="font-size:0.7rem;color:#bb9af7;margin-left:6px;">(${model.split_parts} split files)</span>` : ''}
-                <span class="model-path">${model.path}</span>
-                <!-- Config Panel -->
-                <div id="config-${hashStr(model.path)}" class="config-panel">
-                    <div class="config-grid">
-                        <div class="form-group"><label>Port</label><input type="number" id="port-${hashStr(model.path)}" data-field="port" ${isRunning ? 'disabled' : ''}></div>
-                        <div class="form-group"><label>Context Size</label><input type="number" id="ctx-${hashStr(model.path)}" data-field="ctx_size"></div>
-                        <div class="form-group"><label>Temperature</label><input type="number" step="0.1" id="temp-${hashStr(model.path)}" data-field="temp"></div>
-                        <div class="form-group"><label>Cache Type K</label><input type="text" id="cache_k-${hashStr(model.path)}" data-field="cache_type_k"></div>
-                        <div class="form-group"><label>Cache Type V</label><input type="text" id="cache_v-${hashStr(model.path)}" data-field="cache_type_v"></div>
-                        <div class="form-group"><label>GPU Layers</label><input type="number" id="gpu_layers-${hashStr(model.path)}" data-field="n_gpu_layers"></div>
-                    </div>
-                    <div style="display:flex;gap:8px;">
-                        ${isRunning ? `<button class="btn btn-danger btn-small" onclick="stopModel('${model.path.replace(/'/g, "\\'")}')">⏹ Stop</button>` : `<button class="btn btn-success btn-small" onclick="runModel('${model.path.replace(/'/g, "\\'")}')">▶ Run (saves params)</button>`}
-                        <button class="btn btn-primary btn-small" onclick="saveAndShowParams('${model.path.replace(/'/g, "\\'")}')">💾 Save</button>
-                        <span id="msg-${hashStr(model.path)}" style="color:#73daca;font-size:0.8rem;"></span>
-                    </div>
-                </div>
-            </td>
-            <td><span class="status ${statusClass}">${statusText}</span></td>
-            <td>${running ? running.port : '—'}</td>
-            <td>
-                <button class="btn btn-primary btn-small" onclick="toggleConfig('${model.path.replace(/'/g, "\\'")}')">⚙ Config</button>
-                ${isRunning ? `<button class="btn btn-danger btn-small" onclick="stopModel('${model.path.replace(/'/g, "\\'")}')" style="margin-left:6px;">⏹ Stop</button>` : ''}
-            </td>
-        </tr>`;
-    }
-    tbody.innerHTML = html;
 }
-
-function filterModels() { renderModels(); }
-
-async function refreshModels() { await loadModelsAndStatus(); }
-
-function hashStr(s) { let h = 0; for (let i = 0; i < s.length; i++) { h = ((h << 5) - h) + s.charCodeAt(i); h |= 0; } return Math.abs(h).toString(36); }
 
 async function toggleConfig(path) {
-    const panel = document.getElementById('config-' + hashStr(path));
+    const h = hashStr(path);
+    const panel = document.getElementById('config-' + h);
     if (!panel) return;
     if (panel.classList.toggle('visible')) {
-        // Panel just opened — load saved params and populate inputs
+        // Load params and populate
         const params = await _loadParamsForModel(path);
-        const running = runningModels[path];
-        const fallback = running || params;
-        panel.querySelectorAll('[data-field]').forEach(input => {
-            const field = input.dataset.field;
-            if (fallback && fallback[field] != null) {
-                input.value = fallback[field];
-            } else {
-                input.value = { port: 12345, ctx_size: 200000, temp: 0.2, cache_type_k: 'q8_0', cache_type_v: 'q8_0', n_gpu_layers: 999 }[field] || '';
-            }
-        });
+        const defaults = { ctx_size: 100, temp: 0.2, cache_type_k: 'q8_0', cache_type_v: 'q8_0', n_gpu_layers: 999 };
+        for (const field of ['ctx_size', 'temp', 'cache_type_k', 'cache_type_v', 'n_gpu_layers']) {
+            const input = document.getElementById(`${field}-${h}`);
+            const fg = document.getElementById(`fg-${h}-${field}`);
+            if (!input) continue;
+            const val = params ? params[field] : defaults[field];
+            input.value = val;
+            // Toggle checkbox
+            const enabled = params ? (params[`${field}_enabled`] !== false) : true;
+            const cb = fg.querySelector('input[type="checkbox"]');
+            if (cb) { cb.checked = enabled; toggleField(h, field, enabled); }
+        }
     }
 }
 
-async function saveAndShowParams(path) {
-    const h = hashStr(path);
-    const params = {
-        port: parseInt(document.getElementById('port-' + h).value),
-        ctx_size: parseInt(document.getElementById('ctx-' + h).value),
-        temp: parseFloat(document.getElementById('temp-' + h).value),
-        cache_type_k: document.getElementById('cache_k-' + h).value,
-        cache_type_v: document.getElementById('cache_v-' + h).value,
-        n_gpu_layers: parseInt(document.getElementById('gpu_layers-' + h).value),
-    };
-    const msgEl = document.getElementById('msg-' + h);
-    if (await _saveParamsForModel(path, params)) {
-        msgEl.innerHTML = '<span style="color:#9ece6a">✓ Params saved</span>';
-        setTimeout(() => { msgEl.innerHTML = ''; }, 2500);
-    } else {
-        msgEl.innerHTML = '<span style="color:#f7768e">✗ Save failed</span>';
+function collectConfigFields(path, h) {
+    const fields = ['ctx_size', 'temp', 'cache_type_k', 'cache_type_v', 'n_gpu_layers'];
+    const result = {};
+    for (const field of fields) {
+        const fg = document.getElementById(`fg-${h}-${field}`);
+        const cb = fg ? fg.querySelector('input[type="checkbox"]') : null;
+        const input = document.getElementById(`${field}-${h}`);
+        result[`${field}_enabled`] = cb ? cb.checked : true;
+        if (input) {
+            result[field] = (field === 'temp') ? parseFloat(input.value) : (field === 'n_gpu_layers' || field === 'ctx_size') ? parseInt(input.value) : input.value;
+        }
     }
+    return result;
 }
 
-async function runModel(path) {
-    const h = hashStr(path);
-    const payload = {
-        path: path,
-        port: parseInt(document.getElementById('port-' + h).value),
-        ctx_size: parseInt(document.getElementById('ctx-' + h).value),
-        temp: parseFloat(document.getElementById('temp-' + h).value),
-        cache_type_k: document.getElementById('cache_k-' + h).value || 'q8_0',
-        cache_type_v: document.getElementById('cache_v-' + h).value || 'q8_0',
-        n_gpu_layers: parseInt(document.getElementById('gpu_layers-' + h).value)
-    };
+async function runWithSaved(path, h) {
+    // Fetch saved params then run
+    const params = await _loadParamsForModel(path);
+    if (!params) { toggleConfig(path); return; }  // open config to show defaults
 
-    // Auto-save params before running
-    await _saveParamsForModel(path, {
-        port: payload.port,
-        ctx_size: payload.ctx_size,
-        temp: payload.temp,
-        cache_type_k: payload.cache_type_k,
-        cache_type_v: payload.cache_type_v,
-        n_gpu_layers: payload.n_gpu_layers,
-    });
+    const payload = { path };
+    for (const field of ['ctx_size', 'temp', 'cache_type_k', 'cache_type_v', 'n_gpu_layers']) {
+        payload[`${field}_enabled`] = params[`${field}_enabled`] !== false;
+        payload[field] = params[field];
+    }
+    doRun(path, h, payload);
+}
 
+async function runFromConfig(path, h) {
+    const config = collectConfigFields(path, h);
+    // Auto-save then run
+    await _saveParamsForModel(path, config);
+    const payload = { path, ...config };
+    doRun(path, h, payload);
+}
+
+async function doRun(path, h, payload) {
     const msgEl = document.getElementById('msg-' + h);
     msgEl.innerHTML = '<span class="spinner"></span> Starting...';
-
     try {
         const resp = await fetch('/api/models/run', { method: 'POST', headers: {'Content-Type':'application/json'}, body: JSON.stringify(payload) });
         const data = await resp.json();
@@ -361,19 +391,23 @@ async function runModel(path) {
     }
 }
 
+async function saveAndShowParams(path, h) {
+    const config = collectConfigFields(path, h);
+    await _saveParamsForModel(path, config);
+    const msgEl = document.getElementById('msg-' + h);
+    msgEl.innerHTML = '<span style="color:#9ece6a">✓ Saved</span>';
+    setTimeout(() => { msgEl.innerHTML = ''; }, 2000);
+}
+
 async function stopModel(path) {
     try {
         const resp = await fetch('/api/models/stop', { method: 'POST', headers: {'Content-Type':'application/json'}, body: JSON.stringify({path}) });
         const data = await resp.json();
-        if (data.ok) {
-            setTimeout(() => loadModelsAndStatus(), 1500);
-        } else {
-            alert('Failed to stop: ' + (data.error || 'Unknown error'));
-        }
-    } catch (e) {
-        alert('Error stopping model: ' + e.message);
-    }
+        if (data.ok) setTimeout(() => loadModelsAndStatus(), 1500);
+    } catch (e) { alert('Error stopping model: ' + e.message); }
 }
+
+async function refreshModels() { await loadModelsAndStatus(); }
 </script>
 </body>
 </html>

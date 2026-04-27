@@ -22,6 +22,7 @@ LLAMA_SERVER_CMD = os.getenv(
     'LLAMA_SERVER_CMD',
     '/home/server/llama-cpp-turboquant/build/bin/llama-server'
 )
+MODEL_PORT = int(os.getenv('MODEL_PORT', '12345'))
 
 # ── Process registry ───────────────────────────────────────────────────
 running_processes: dict[str, dict] = {}
@@ -33,13 +34,15 @@ app = Flask(__name__)
 _PARAMS_FILE = Path(__file__).parent / 'model_params.json'
 
 _DEFAULT_PARAMS = {
-    'port': 12345,
-    'ctx_size': 200000,
+    'ctx_size': 100,          # shorthand: 100 means 100k
     'temp': 0.2,
     'cache_type_k': 'q8_0',
     'cache_type_v': 'q8_0',
     'n_gpu_layers': 999,
 }
+
+# Which params have enable/disable toggles (port excluded — always on)
+_TOGGLED_PARAMS = {'ctx_size', 'temp', 'cache_type_k', 'cache_type_v', 'n_gpu_layers'}
 
 
 def _load_params() -> dict:
@@ -61,16 +64,22 @@ def get_model_params(path: str) -> dict:
     """Get saved params for a model path (falls back to defaults)."""
     all_params = _load_params()
     saved = all_params.get(path, {})
-    merged = {**_DEFAULT_PARAMS, **saved}
-    # Ensure numeric types
-    return {
-        'port': int(merged['port']),
-        'ctx_size': int(merged['ctx_size']),
-        'temp': float(merged['temp']),
-        'cache_type_k': str(merged.get('cache_type_k', _DEFAULT_PARAMS['cache_type_k'])),
-        'cache_type_v': str(merged.get('cache_type_v', _DEFAULT_PARAMS['cache_type_v'])),
-        'n_gpu_layers': int(merged['n_gpu_layers']),
-    }
+    result = {}
+    for key, default in _DEFAULT_PARAMS.items():
+        val = saved.get(key, default)
+        if key == 'ctx_size':
+            val = int(val)
+        elif key == 'temp':
+            val = float(val)
+        elif key == 'n_gpu_layers':
+            val = int(val)
+        else:
+            val = str(val)
+        result[key] = val
+        # enable flag defaults to True unless explicitly saved otherwise
+        if key in _TOGGLED_PARAMS:
+            result[f'{key}_enabled'] = bool(saved.get(f'{key}_enabled', True))
+    return result
 
 
 def save_model_params(path: str, params: dict):
@@ -92,12 +101,12 @@ def _scan_models() -> list[dict]:
     if not base.is_dir():
         return models
 
-    # Collect all .gguf files that are NOT inside .mmproj directories
+    # Collect all .gguf files that are NOT inside directories ending with .mmproj
     all_ggufs = []
     for gguf in sorted(base.rglob('*.gguf')):
         rel = gguf.relative_to(base)
-        # Skip anything under a directory named *.mmproj or with .mmproj in path
-        if any('.mmproj' in str(parent) for parent in gguf.parents):
+        # Skip only if a parent directory name ends with .mmproj (e.g. mmproj-f16/)
+        if any(parent.name.endswith('.mmproj') for parent in gguf.parents):
             continue
         all_ggufs.append(gguf)
 
@@ -114,6 +123,7 @@ def _scan_models() -> list[dict]:
 
     for gguf in all_ggufs:
         m = _SPLIT_RE.search(gguf.name)
+        mtime = int(gguf.stat().st_mtime * 1000)  # ms for JS Date
         if m:
             d = str(gguf.parent)
             key = (d, m.group(2))
@@ -123,6 +133,7 @@ def _scan_models() -> list[dict]:
             models.append({
                 'name': display_name,
                 'path': str(gguf),
+                'mtime': mtime,
                 'split_parts': len(split_groups[d]),
             })
         else:
@@ -137,6 +148,7 @@ def _scan_models() -> list[dict]:
             models.append({
                 'name': display_name,
                 'path': str(gguf),
+                'mtime': mtime,
             })
     return models
 
@@ -203,12 +215,8 @@ def api_run_model():
     if path in running_processes:
         return jsonify({'ok': False, 'error': 'Already running'}), 409
 
-    port = int(data.get('port', 12345))
-    ctx_size = int(data.get('ctx_size', 200000))
-    temp = float(data.get('temp', 0.2))
-    cache_k = data.get('cache_type_k', 'q8_0') or 'q8_0'
-    cache_v = data.get('cache_type_v', 'q8_0') or 'q8_0'
-    n_gpu_layers = int(data.get('n_gpu_layers', 999))
+    # Port is global from env — ignore any per-model value
+    port = MODEL_PORT
 
     cmd = [
         LLAMA_SERVER_CMD,
@@ -216,12 +224,26 @@ def api_run_model():
         '--flash-attn', 'on',
         '--host', '0.0.0.0',
         '--port', str(port),
-        '--temp', str(temp),
-        '--cache-type-k', cache_k,
-        '--cache-type-v', cache_v,
-        '--ctx-size', str(ctx_size),
-        '--n-gpu-layers', str(n_gpu_layers),
     ]
+
+    # Build flags only for enabled options
+    if data.get('ctx_size_enabled'):
+        ctx_val = int(data.get('ctx_size', 100)) * 1_000   # shorthand: 10 → 10k
+        cmd.extend(['--ctx-size', str(ctx_val)])
+
+    if data.get('temp_enabled'):
+        cmd.extend(['--temp', str(float(data.get('temp', 0.2)))])
+
+    if data.get('cache_type_k_enabled'):
+        cache_k = (data.get('cache_type_k') or 'q8_0')
+        cmd.extend(['--cache-type-k', cache_k])
+
+    if data.get('cache_type_v_enabled'):
+        cache_v = (data.get('cache_type_v') or 'q8_0')
+        cmd.extend(['--cache-type-v', cache_v])
+
+    if data.get('n_gpu_layers_enabled'):
+        cmd.extend(['--n-gpu-layers', str(int(data.get('n_gpu_layers', 999)))])
 
     try:
         proc = subprocess.Popen(
@@ -237,11 +259,7 @@ def api_run_model():
         'pid': proc.pid,
         'proc': proc,
         'port': port,
-        'ctx_size': ctx_size,
-        'temp': temp,
-        'cache_type_k': cache_k,
-        'cache_type_v': cache_v,
-        'n_gpu_layers': n_gpu_layers,
+        **{k: data[k] for k in ('ctx_size', 'temp', 'cache_type_k', 'cache_type_v', 'n_gpu_layers') if k in data},
     }
 
     return jsonify({'ok': True, 'pid': proc.pid, 'port': port})
