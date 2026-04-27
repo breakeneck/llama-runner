@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 """Llama Runner - Web interface for managing llama-server instances."""
 
+import json
 import os
 import re
 import subprocess
@@ -27,6 +28,56 @@ running_processes: dict[str, dict] = {}
 """key=model_path, value={'pid': int, 'port': int, 'proc': Popen, **params}"""
 
 app = Flask(__name__)
+
+# ── Per-model parameter persistence ─────────────────────────────────────
+_PARAMS_FILE = Path(__file__).parent / 'model_params.json'
+
+_DEFAULT_PARAMS = {
+    'port': 12345,
+    'ctx_size': 200000,
+    'temp': 0.2,
+    'cache_type_k': 'q8_0',
+    'cache_type_v': 'q8_0',
+    'n_gpu_layers': 999,
+}
+
+
+def _load_params() -> dict:
+    """Load saved per-model parameters from disk."""
+    if _PARAMS_FILE.exists():
+        try:
+            return json.loads(_PARAMS_FILE.read_text())
+        except (json.JSONDecodeError, OSError):
+            return {}
+    return {}
+
+
+def _save_params(params: dict):
+    """Persist per-model parameters to disk."""
+    _PARAMS_FILE.write_text(json.dumps(params, indent=2))
+
+
+def get_model_params(path: str) -> dict:
+    """Get saved params for a model path (falls back to defaults)."""
+    all_params = _load_params()
+    saved = all_params.get(path, {})
+    merged = {**_DEFAULT_PARAMS, **saved}
+    # Ensure numeric types
+    return {
+        'port': int(merged['port']),
+        'ctx_size': int(merged['ctx_size']),
+        'temp': float(merged['temp']),
+        'cache_type_k': str(merged.get('cache_type_k', _DEFAULT_PARAMS['cache_type_k'])),
+        'cache_type_v': str(merged.get('cache_type_v', _DEFAULT_PARAMS['cache_type_v'])),
+        'n_gpu_layers': int(merged['n_gpu_layers']),
+    }
+
+
+def save_model_params(path: str, params: dict):
+    """Save (merge) params for a specific model path to disk."""
+    all_params = _load_params()
+    all_params[path] = {**all_params.get(path, {}), **params}
+    _save_params(all_params)
 
 
 # ── Helpers ─────────────────────────────────────────────────────────────
@@ -216,6 +267,23 @@ def api_stop_model():
         except Exception:
             pass
 
+    return jsonify({'ok': True})
+
+
+@app.route('/api/models/params/<path:path>', methods=['GET'])
+def api_get_model_params(path):
+    """Return saved parameters for a specific model path."""
+    params = get_model_params(path)
+    return jsonify(params)
+
+
+@app.route('/api/models/params', methods=['POST'])
+def api_save_model_params():
+    """Save (merge) parameters for a model path to disk."""
+    data = request.get_json(force=True)
+    path = data['path']
+    params = {k: v for k, v in data.items() if k != 'path'}
+    save_model_params(path, params)
     return jsonify({'ok': True})
 
 

@@ -135,6 +135,7 @@
 <script>
 let allModels = [];
 let runningModels = {};
+let savedParamsCache = {};  // path -> params (from server)
 let vramInterval = null;
 
 document.addEventListener('DOMContentLoaded', () => {
@@ -195,6 +196,30 @@ async function loadModelsAndStatus() {
     }
 }
 
+async function _loadParamsForModel(path) {
+    if (savedParamsCache[path]) return savedParamsCache[path];
+    try {
+        const resp = await fetch('/api/models/params/' + encodeURIComponent(path));
+        const data = await resp.json();
+        savedParamsCache[path] = data;
+        return data;
+    } catch {
+        return null;
+    }
+}
+
+async function _saveParamsForModel(path, params) {
+    try {
+        const resp = await fetch('/api/models/params', { method: 'POST', headers: {'Content-Type':'application/json'}, body: JSON.stringify({ path, ...params }) });
+        const data = await resp.json();
+        if (data.ok) {
+            savedParamsCache[path] = { ...savedParamsCache[path], ...params };
+            return true;
+        }
+    } catch {}
+    return false;
+}
+
 function renderModels() {
     const tbody = document.getElementById('model-list');
     const filter = document.getElementById('search-input').value.toLowerCase();
@@ -223,19 +248,21 @@ function renderModels() {
         html += `<tr class="model-row" data-name="${model.name.toLowerCase()}">
             <td>
                 <span class="model-name" onclick="toggleConfig('${model.path.replace(/'/g, "\\'")}')">${model.name}</span>
+                ${model.split_parts ? `<span style="font-size:0.7rem;color:#bb9af7;margin-left:6px;">(${model.split_parts} split files)</span>` : ''}
                 <span class="model-path">${model.path}</span>
                 <!-- Config Panel -->
                 <div id="config-${hashStr(model.path)}" class="config-panel">
                     <div class="config-grid">
-                        <div class="form-group"><label>Port</label><input type="number" id="port-${hashStr(model.path)}" value="${running ? running.port : 12345}" ${isRunning ? 'disabled' : ''}></div>
-                        <div class="form-group"><label>Context Size</label><input type="number" id="ctx-${hashStr(model.path)}" value="${running ? running.ctx_size : 200000}"></div>
-                        <div class="form-group"><label>Temperature</label><input type="number" step="0.1" id="temp-${hashStr(model.path)}" value="${running ? running.temp : 0.2}"></div>
-                        <div class="form-group"><label>Cache Type K</label><input type="text" id="cache_k-${hashStr(model.path)}" value="${running ? running.cache_type_k : 'q8_0'}"></div>
-                        <div class="form-group"><label>Cache Type V</label><input type="text" id="cache_v-${hashStr(model.path)}" value="${running ? running.cache_type_v : 'q8_0'}"></div>
-                        <div class="form-group"><label>GPU Layers</label><input type="number" id="gpu_layers-${hashStr(model.path)}" value="${running ? running.n_gpu_layers : 999}"></div>
+                        <div class="form-group"><label>Port</label><input type="number" id="port-${hashStr(model.path)}" data-field="port" ${isRunning ? 'disabled' : ''}></div>
+                        <div class="form-group"><label>Context Size</label><input type="number" id="ctx-${hashStr(model.path)}" data-field="ctx_size"></div>
+                        <div class="form-group"><label>Temperature</label><input type="number" step="0.1" id="temp-${hashStr(model.path)}" data-field="temp"></div>
+                        <div class="form-group"><label>Cache Type K</label><input type="text" id="cache_k-${hashStr(model.path)}" data-field="cache_type_k"></div>
+                        <div class="form-group"><label>Cache Type V</label><input type="text" id="cache_v-${hashStr(model.path)}" data-field="cache_type_v"></div>
+                        <div class="form-group"><label>GPU Layers</label><input type="number" id="gpu_layers-${hashStr(model.path)}" data-field="n_gpu_layers"></div>
                     </div>
                     <div style="display:flex;gap:8px;">
-                        ${isRunning ? `<button class="btn btn-danger btn-small" onclick="stopModel('${model.path.replace(/'/g, "\\'")}')">⏹ Stop</button>` : `<button class="btn btn-success btn-small" onclick="runModel('${model.path.replace(/'/g, "\\'")}')">▶ Run</button>`}
+                        ${isRunning ? `<button class="btn btn-danger btn-small" onclick="stopModel('${model.path.replace(/'/g, "\\'")}')">⏹ Stop</button>` : `<button class="btn btn-success btn-small" onclick="runModel('${model.path.replace(/'/g, "\\'")}')">▶ Run (saves params)</button>`}
+                        <button class="btn btn-primary btn-small" onclick="saveAndShowParams('${model.path.replace(/'/g, "\\'")}')">💾 Save</button>
                         <span id="msg-${hashStr(model.path)}" style="color:#73daca;font-size:0.8rem;"></span>
                     </div>
                 </div>
@@ -255,12 +282,45 @@ function filterModels() { renderModels(); }
 
 async function refreshModels() { await loadModelsAndStatus(); }
 
-function toggleConfig(path) {
+function hashStr(s) { let h = 0; for (let i = 0; i < s.length; i++) { h = ((h << 5) - h) + s.charCodeAt(i); h |= 0; } return Math.abs(h).toString(36); }
+
+async function toggleConfig(path) {
     const panel = document.getElementById('config-' + hashStr(path));
-    if (panel) panel.classList.toggle('visible');
+    if (!panel) return;
+    if (panel.classList.toggle('visible')) {
+        // Panel just opened — load saved params and populate inputs
+        const params = await _loadParamsForModel(path);
+        const running = runningModels[path];
+        const fallback = running || params;
+        panel.querySelectorAll('[data-field]').forEach(input => {
+            const field = input.dataset.field;
+            if (fallback && fallback[field] != null) {
+                input.value = fallback[field];
+            } else {
+                input.value = { port: 12345, ctx_size: 200000, temp: 0.2, cache_type_k: 'q8_0', cache_type_v: 'q8_0', n_gpu_layers: 999 }[field] || '';
+            }
+        });
+    }
 }
 
-function hashStr(s) { let h = 0; for (let i = 0; i < s.length; i++) { h = ((h << 5) - h) + s.charCodeAt(i); h |= 0; } return Math.abs(h).toString(36); }
+async function saveAndShowParams(path) {
+    const h = hashStr(path);
+    const params = {
+        port: parseInt(document.getElementById('port-' + h).value),
+        ctx_size: parseInt(document.getElementById('ctx-' + h).value),
+        temp: parseFloat(document.getElementById('temp-' + h).value),
+        cache_type_k: document.getElementById('cache_k-' + h).value,
+        cache_type_v: document.getElementById('cache_v-' + h).value,
+        n_gpu_layers: parseInt(document.getElementById('gpu_layers-' + h).value),
+    };
+    const msgEl = document.getElementById('msg-' + h);
+    if (await _saveParamsForModel(path, params)) {
+        msgEl.innerHTML = '<span style="color:#9ece6a">✓ Params saved</span>';
+        setTimeout(() => { msgEl.innerHTML = ''; }, 2500);
+    } else {
+        msgEl.innerHTML = '<span style="color:#f7768e">✗ Save failed</span>';
+    }
+}
 
 async function runModel(path) {
     const h = hashStr(path);
@@ -273,6 +333,16 @@ async function runModel(path) {
         cache_type_v: document.getElementById('cache_v-' + h).value || 'q8_0',
         n_gpu_layers: parseInt(document.getElementById('gpu_layers-' + h).value)
     };
+
+    // Auto-save params before running
+    await _saveParamsForModel(path, {
+        port: payload.port,
+        ctx_size: payload.ctx_size,
+        temp: payload.temp,
+        cache_type_k: payload.cache_type_k,
+        cache_type_v: payload.cache_type_v,
+        n_gpu_layers: payload.n_gpu_layers,
+    });
 
     const msgEl = document.getElementById('msg-' + h);
     msgEl.innerHTML = '<span class="spinner"></span> Starting...';

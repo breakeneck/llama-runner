@@ -2,7 +2,7 @@
 set -e
 
 git fetch origin &&
-git reset --hard origin/main &&
+git reset --hard origin/master &&
 git clean -fd &&
 git log -1 --pretty=format:"%h %s"
 
