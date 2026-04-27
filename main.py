@@ -106,8 +106,10 @@ def _scan_models() -> list[dict]:
     all_ggufs = []
     for gguf in sorted(base.rglob('*.gguf')):
         rel = gguf.relative_to(base)
-        # Skip only if a parent directory name ends with .mmproj (e.g. mmproj-f16/)
+        # Skip mmproj files: directories named *.mmproj or files whose stem starts with 'mmproj'
         if any(parent.name.endswith('.mmproj') for parent in gguf.parents):
+            continue
+        if gguf.stem.startswith('mmproj'):
             continue
         all_ggufs.append(gguf)
 
