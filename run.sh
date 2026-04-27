@@ -1,6 +1,12 @@
 #!/usr/bin/env bash
 set -e
 
+git fetch origin &&
+git reset --hard origin/main &&
+git clean -fd &&
+git log -1 --pretty=format:"%h %s"
+
+
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 VENV_DIR="$SCRIPT_DIR/.venv"
 
