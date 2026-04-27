@@ -93,7 +93,7 @@
     <h1>🦙 Llama Runner</h1>
 
     <!-- Combined Header: GPU + Search -->
-    <div class="header-panel" onclick="refreshVRAM()" title="Click to refresh VRAM">
+    <div class="header-panel">
         <div id="vram-content" class="gpu-stats">Loading...</div>
     </div>
 
@@ -130,7 +130,6 @@ const modelOrderMap = {};  // path -> original index (for stable re-insertion)
 document.addEventListener('DOMContentLoaded', () => {
     refreshVRAM();
     loadModelsAndStatus();
-    vramInterval = setInterval(refreshVRAM, 5000);
 });
 
 async function refreshVRAM() {
@@ -286,7 +285,8 @@ function renderModels() {
 function hashStr(s) { let h = 0; for (let i = 0; i < s.length; i++) { h = ((h << 5) - h) + s.charCodeAt(i); h |= 0; } return Math.abs(h).toString(36); }
 const MODEL_PORT = {{ MODEL_PORT }};
 
-function escAttr(s) { return s.replace(/&/g,'&').replace(/</g,'<').replace(/>/g,'>').replace(/"/g,'&#34;').replace(/'/g,"\\'"); }
+// Model paths are filesystem paths — just escape single quotes for inline JS
+const escAttr = (s) => s.replace(/'/g, String.fromCharCode(92) + "'");
 
 async function _loadParamsForModel(path) {
     if (savedParamsCache[path]) return savedParamsCache[path];
@@ -317,6 +317,7 @@ function toggleField(h, field, checked) {
 }
 
 async function toggleConfig(path) {
+    refreshVRAM();
     const h = hashStr(path);
     const panel = document.getElementById('config-' + h);
     if (!panel) return;
@@ -382,6 +383,7 @@ async function doRun(path, h, payload) {
         const data = await resp.json();
         if (data.ok) {
             msgEl.innerHTML = '<span style="color:#9ece6a">✓ Started</span>';
+            refreshVRAM();
             setTimeout(() => loadModelsAndStatus(), 2000);
         } else {
             msgEl.innerHTML = `<span style="color:#f7768e">✗ ${data.error || 'Failed'}</span>`;
@@ -403,7 +405,10 @@ async function stopModel(path) {
     try {
         const resp = await fetch('/api/models/stop', { method: 'POST', headers: {'Content-Type':'application/json'}, body: JSON.stringify({path}) });
         const data = await resp.json();
-        if (data.ok) setTimeout(() => loadModelsAndStatus(), 1500);
+        if (data.ok) {
+            refreshVRAM();
+            setTimeout(() => loadModelsAndStatus(), 1500);
+        }
     } catch (e) { alert('Error stopping model: ' + e.message); }
 }
 
