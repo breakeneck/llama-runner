@@ -1,0 +1,309 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Llama Runner</title>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; background: #1a1b26; color: #a9b1d6; min-height: 100vh; }
+        .container { max-width: 1200px; margin: 0 auto; padding: 20px; }
+
+        h1 { color: #7aa2f7; margin-bottom: 16px; font-size: 1.8rem; }
+
+        /* VRAM Panel */
+        .vram-panel {
+            background: #24283b; border: 1px solid #414868; border-radius: 8px;
+            padding: 16px; margin-bottom: 20px; cursor: pointer; position: relative;
+        }
+        .vram-panel:hover { background: #292e42; }
+        .vram-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px; }
+        .vram-title { font-weight: bold; color: #7aa2f7; }
+        .vram-refresh-hint { font-size: 0.8rem; color: #565f89; }
+        .vram-content { display: grid; gap: 8px; }
+        .gpu-row { background: #1a1b26; border-radius: 6px; padding: 12px; display: flex; justify-content: space-between; align-items: center; }
+        .gpu-name { font-weight: bold; color: #c0caf5; }
+        .gpu-stats { display: flex; gap: 20px; font-size: 0.9rem; }
+        .gpu-stat span { color: #7aa2f7; font-weight: bold; }
+        .vram-bar { width: 150px; height: 8px; background: #414868; border-radius: 4px; overflow: hidden; display: inline-block; vertical-align: middle; margin-left: 8px; }
+        .vram-bar-fill { height: 100%; background: linear-gradient(90deg, #7aa2f7, #bb9af7); border-radius: 4px; transition: width 0.3s; }
+
+        /* Controls */
+        .controls { display: flex; gap: 10px; margin-bottom: 16px; align-items: center; }
+        input[type="text"] {
+            background: #24283b; border: 1px solid #414868; color: #c0caf5; padding: 8px 14px;
+            border-radius: 6px; font-size: 0.9rem; flex: 1; outline: none;
+        }
+        input[type="text"]:focus { border-color: #7aa2f7; }
+
+        /* Buttons */
+        .btn {
+            padding: 8px 16px; border: none; border-radius: 6px; cursor: pointer;
+            font-size: 0.85rem; font-weight: bold; transition: all 0.2s; white-space: nowrap;
+        }
+        .btn-primary { background: #7aa2f7; color: #1a1b26; }
+        .btn-primary:hover { background: #5d8ae9; }
+        .btn-success { background: #9ece6a; color: #1a1b26; }
+        .btn-success:hover { background: #8abf5b; }
+        .btn-danger { background: #f7768e; color: #1a1b26; }
+        .btn-danger:hover { background: #e0647c; }
+        .btn-small { padding: 5px 10px; font-size: 0.8rem; }
+        .btn:disabled { opacity: 0.4; cursor: not-allowed; }
+
+        /* Model Table */
+        .model-table { width: 100%; border-collapse: collapse; }
+        .model-table th { text-align: left; padding: 12px; background: #24283b; color: #7aa2f7; font-size: 0.85rem; text-transform: uppercase; letter-spacing: 0.5px; position: sticky; top: 0; }
+        .model-table th:first-child { border-radius: 8px 0 0 0; }
+        .model-table th:last-child { border-radius: 0 8px 0 0; }
+        .model-table td { padding: 12px; border-bottom: 1px solid #2f354b; vertical-align: top; }
+        .model-row { background: #1a1b26; transition: background 0.2s; }
+        .model-row:hover { background: #24283b; }
+        .model-name { color: #c0caf5; font-weight: bold; cursor: pointer; }
+        .model-path { display: block; font-size: 0.75rem; color: #565f89; margin-top: 2px; word-break: break-all; }
+
+        /* Config Panel */
+        .config-panel {
+            background: #24283b; border-radius: 8px; padding: 16px; margin: 10px 0;
+            display: none; border: 1px solid #414868;
+        }
+        .config-panel.visible { display: block; }
+        .config-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); gap: 12px; margin-bottom: 12px; }
+        .form-group label { display: block; font-size: 0.8rem; color: #7aa2f7; margin-bottom: 4px; }
+        .form-group input {
+            width: 100%; background: #1a1b26; border: 1px solid #414868; color: #c0caf5;
+            padding: 6px 10px; border-radius: 4px; font-size: 0.9rem; outline: none;
+        }
+        .form-group input:focus { border-color: #7aa2f7; }
+
+        /* Status */
+        .status { display: inline-block; padding: 3px 10px; border-radius: 12px; font-size: 0.8rem; font-weight: bold; }
+        .status-stopped { background: #414868; color: #a9b1d6; }
+        .status-running { background: #9ece6a; color: #1a1b26; animation: pulse 2s infinite; }
+
+        @keyframes pulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.7; } }
+
+        /* Spinner */
+        .spinner { display: inline-block; width: 14px; height: 14px; border: 2px solid transparent; border-top-color: currentColor; border-radius: 50%; animation: spin 0.6s linear infinite; vertical-align: middle; margin-right: 6px; }
+        @keyframes spin { to { transform: rotate(360deg); } }
+
+        .no-models { text-align: center; padding: 40px; color: #565f89; font-size: 1.1rem; }
+
+        /* Log output */
+        .log-panel { background: #24283b; border-radius: 8px; padding: 12px; margin-top: 10px; max-height: 200px; overflow-y: auto; font-family: monospace; font-size: 0.8rem; color: #73daca; display: none; }
+        .log-panel.visible { display: block; }
+
+        /* Auto-refresh indicator */
+        .auto-refresh-dot { width: 8px; height: 8px; border-radius: 50%; background: #9ece6a; display: inline-block; margin-right: 6px; animation: pulse 2s infinite; }
+    </style>
+</head>
+<body>
+<div class="container">
+    <h1>🦙 Llama Runner</h1>
+
+    <!-- VRAM Panel -->
+    <div class="vram-panel" onclick="refreshVRAM()" title="Click to refresh VRAM">
+        <div class="vram-header">
+            <span class="vram-title"><span class="auto-refresh-dot"></span>GPU Memory</span>
+            <span class="vram-refresh-hint">Auto-updates every 5s · Click to refresh now</span>
+        </div>
+        <div id="vram-content" class="vram-content">Loading...</div>
+    </div>
+
+    <!-- Controls -->
+    <div class="controls">
+        <input type="text" id="search-input" placeholder="🔍 Filter models by name..." oninput="filterModels()">
+        <button class="btn btn-primary" onclick="refreshModels()">⟳ Refresh Models</button>
+    </div>
+
+    <!-- Model List -->
+    <table class="model-table">
+        <thead>
+            <tr>
+                <th style="width:40%">Model</th>
+                <th style="width:15%">Status</th>
+                <th style="width:15%">Port</th>
+                <th style="width:30%">Actions</th>
+            </tr>
+        </thead>
+        <tbody id="model-list">
+        </tbody>
+    </table>
+
+    <div id="no-models" class="no-models" style="display:none;">No models found. Check MODEL_DIR configuration.</div>
+</div>
+
+<script>
+let allModels = [];
+let runningModels = {};
+let vramInterval = null;
+
+document.addEventListener('DOMContentLoaded', () => {
+    refreshVRAM();
+    loadModelsAndStatus();
+    // Auto-refresh VRAM every 5 seconds
+    vramInterval = setInterval(refreshVRAM, 5000);
+});
+
+async function refreshVRAM() {
+    try {
+        const resp = await fetch('/api/vram');
+        const data = await resp.json();
+        renderVRAM(data);
+    } catch (e) {
+        document.getElementById('vram-content').innerHTML = '<span style="color:#f7768e">Failed to get VRAM info</span>';
+    }
+}
+
+function renderVRAM(data) {
+    const el = document.getElementById('vram-content');
+    if (!data.gpus || data.gpus.length === 0) {
+        el.innerHTML = '<span style="color:#565f89">No GPUs detected</span>';
+        return;
+    }
+    let html = '';
+    for (const gpu of data.gpus) {
+        const pct = Math.round(gpu.used * 100 / gpu.total);
+        html += `<div class="gpu-row">
+            <span class="gpu-name">${gpu.name}</span>
+            <div class="gpu-stats">
+                <span class="gpu-stat">VRAM: <span>${gpu.used}GB</span> / ${gpu.total}GB
+                    <span class="vram-bar"><span class="vram-bar-fill" style="width:${pct}%"></span></span>
+                </span>
+                <span class="gpu-stat">Temp: <span>${gpu.temp}°C</span></span>
+                <span class="gpu-stat">Power: <span>${gpu.power}W</span></span>
+            </div>
+        </div>`;
+    }
+    el.innerHTML = html;
+}
+
+async function loadModelsAndStatus() {
+    try {
+        const [modelsResp, statusResp] = await Promise.all([
+            fetch('/api/models'),
+            fetch('/api/status')
+        ]);
+        allModels = await modelsResp.json();
+        const status = await statusResp.json();
+        runningModels = {};
+        for (const m of status.running) {
+            runningModels[m.path] = m;
+        }
+        renderModels();
+    } catch (e) {
+        console.error('Failed to load models:', e);
+    }
+}
+
+function renderModels() {
+    const tbody = document.getElementById('model-list');
+    const filter = document.getElementById('search-input').value.toLowerCase();
+    const filtered = allModels.filter(m => m.name.toLowerCase().includes(filter) || m.path.toLowerCase().includes(filter));
+
+    if (filtered.length === 0 && allModels.length > 0) {
+        tbody.innerHTML = '';
+        document.getElementById('no-models').style.display = 'none';
+        return;
+    }
+
+    if (allModels.length === 0) {
+        tbody.innerHTML = '';
+        document.getElementById('no-models').style.display = 'block';
+        return;
+    }
+
+    document.getElementById('no-models').style.display = 'none';
+    let html = '';
+    for (const model of filtered) {
+        const running = runningModels[model.path];
+        const statusClass = running ? 'status-running' : 'status-stopped';
+        const statusText = running ? `Running (${running.port})` : 'Stopped';
+        const isRunning = !!running;
+
+        html += `<tr class="model-row" data-name="${model.name.toLowerCase()}">
+            <td>
+                <span class="model-name" onclick="toggleConfig('${model.path.replace(/'/g, "\\'")}')">${model.name}</span>
+                <span class="model-path">${model.path}</span>
+                <!-- Config Panel -->
+                <div id="config-${hashStr(model.path)}" class="config-panel">
+                    <div class="config-grid">
+                        <div class="form-group"><label>Port</label><input type="number" id="port-${hashStr(model.path)}" value="${running ? running.port : 12345}" ${isRunning ? 'disabled' : ''}></div>
+                        <div class="form-group"><label>Context Size</label><input type="number" id="ctx-${hashStr(model.path)}" value="${running ? running.ctx_size : 200000}"></div>
+                        <div class="form-group"><label>Temperature</label><input type="number" step="0.1" id="temp-${hashStr(model.path)}" value="${running ? running.temp : 0.2}"></div>
+                        <div class="form-group"><label>Cache Type K</label><input type="text" id="cache_k-${hashStr(model.path)}" value="${running ? running.cache_type_k : 'q8_0'}"></div>
+                        <div class="form-group"><label>Cache Type V</label><input type="text" id="cache_v-${hashStr(model.path)}" value="${running ? running.cache_type_v : 'q8_0'}"></div>
+                        <div class="form-group"><label>GPU Layers</label><input type="number" id="gpu_layers-${hashStr(model.path)}" value="${running ? running.n_gpu_layers : 999}"></div>
+                    </div>
+                    <div style="display:flex;gap:8px;">
+                        ${isRunning ? `<button class="btn btn-danger btn-small" onclick="stopModel('${model.path.replace(/'/g, "\\'")}')">⏹ Stop</button>` : `<button class="btn btn-success btn-small" onclick="runModel('${model.path.replace(/'/g, "\\'")}')">▶ Run</button>`}
+                        <span id="msg-${hashStr(model.path)}" style="color:#73daca;font-size:0.8rem;"></span>
+                    </div>
+                </div>
+            </td>
+            <td><span class="status ${statusClass}">${statusText}</span></td>
+            <td>${running ? running.port : '—'}</td>
+            <td>
+                <button class="btn btn-primary btn-small" onclick="toggleConfig('${model.path.replace(/'/g, "\\'")}')">⚙ Config</button>
+                ${isRunning ? `<button class="btn btn-danger btn-small" onclick="stopModel('${model.path.replace(/'/g, "\\'")}')" style="margin-left:6px;">⏹ Stop</button>` : ''}
+            </td>
+        </tr>`;
+    }
+    tbody.innerHTML = html;
+}
+
+function filterModels() { renderModels(); }
+
+async function refreshModels() { await loadModelsAndStatus(); }
+
+function toggleConfig(path) {
+    const panel = document.getElementById('config-' + hashStr(path));
+    if (panel) panel.classList.toggle('visible');
+}
+
+function hashStr(s) { let h = 0; for (let i = 0; i < s.length; i++) { h = ((h << 5) - h) + s.charCodeAt(i); h |= 0; } return Math.abs(h).toString(36); }
+
+async function runModel(path) {
+    const h = hashStr(path);
+    const payload = {
+        path: path,
+        port: parseInt(document.getElementById('port-' + h).value),
+        ctx_size: parseInt(document.getElementById('ctx-' + h).value),
+        temp: parseFloat(document.getElementById('temp-' + h).value),
+        cache_type_k: document.getElementById('cache_k-' + h).value || 'q8_0',
+        cache_type_v: document.getElementById('cache_v-' + h).value || 'q8_0',
+        n_gpu_layers: parseInt(document.getElementById('gpu_layers-' + h).value)
+    };
+
+    const msgEl = document.getElementById('msg-' + h);
+    msgEl.innerHTML = '<span class="spinner"></span> Starting...';
+
+    try {
+        const resp = await fetch('/api/models/run', { method: 'POST', headers: {'Content-Type':'application/json'}, body: JSON.stringify(payload) });
+        const data = await resp.json();
+        if (data.ok) {
+            msgEl.innerHTML = '<span style="color:#9ece6a">✓ Started</span>';
+            setTimeout(() => loadModelsAndStatus(), 2000);
+        } else {
+            msgEl.innerHTML = `<span style="color:#f7768e">✗ ${data.error || 'Failed'}</span>`;
+        }
+    } catch (e) {
+        msgEl.innerHTML = `<span style="color:#f7768e">✗ Error: ${e.message}</span>`;
+    }
+}
+
+async function stopModel(path) {
+    try {
+        const resp = await fetch('/api/models/stop', { method: 'POST', headers: {'Content-Type':'application/json'}, body: JSON.stringify({path}) });
+        const data = await resp.json();
+        if (data.ok) {
+            setTimeout(() => loadModelsAndStatus(), 1500);
+        } else {
+            alert('Failed to stop: ' + (data.error || 'Unknown error'));
+        }
+    } catch (e) {
+        alert('Error stopping model: ' + e.message);
+    }
+}
+</script>
+</body>
+</html>
