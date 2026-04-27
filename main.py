@@ -31,25 +31,62 @@ app = Flask(__name__)
 
 # ── Helpers ─────────────────────────────────────────────────────────────
 
+_SPLIT_RE = re.compile(r'-(\d{5})-of-(\d{5})\.gguf$', re.IGNORECASE)
+
+
 def _scan_models() -> list[dict]:
-    """Recursively find .gguf files and build model entries."""
+    """Recursively find .gguf files, skip .mmproj paths, and group tensor-split models."""
     models = []
     base = Path(MODEL_DIR)
     if not base.is_dir():
         return models
+
+    # Collect all .gguf files that are NOT inside .mmproj directories
+    all_ggufs = []
     for gguf in sorted(base.rglob('*.gguf')):
         rel = gguf.relative_to(base)
-        parts = rel.parts  # ('author', 'model-folder', 'file.gguf')
-        if len(parts) >= 2:
-            author = parts[0]
-            filename = Path(parts[-1]).stem  # file without .gguf
-            display_name = f"{author}-{filename}"
+        # Skip anything under a directory named *.mmproj or with .mmproj in path
+        if any('.mmproj' in str(parent) for parent in gguf.parents):
+            continue
+        all_ggufs.append(gguf)
+
+    # Group tensor-split files: treat the whole split set as one model
+    seen_split_dirs: set[str] = set()
+    split_groups: dict[str, list[Path]] = {}  # dir -> sorted split files
+
+    for gguf in all_ggufs:
+        m = _SPLIT_RE.search(gguf.name)
+        if m:
+            d = str(gguf.parent)
+            split_groups.setdefault(d, []).append(gguf)
+            seen_split_dirs.add((d, m.group(2)))  # dir + total parts
+
+    for gguf in all_ggufs:
+        m = _SPLIT_RE.search(gguf.name)
+        if m:
+            d = str(gguf.parent)
+            key = (d, m.group(2))
+            if key in seen_split_dirs and gguf != sorted(split_groups[d])[0]:
+                continue  # skip non-first parts of split models
+            display_name = f"{gguf.parent.name}-{_SPLIT_RE.sub('', gguf.stem)}"
+            models.append({
+                'name': display_name,
+                'path': str(gguf),
+                'split_parts': len(split_groups[d]),
+            })
         else:
-            display_name = gguf.name
-        models.append({
-            'name': display_name,
-            'path': str(gguf),
-        })
+            rel = gguf.relative_to(base)
+            parts = rel.parts  # ('author', 'model-folder', 'file.gguf')
+            if len(parts) >= 2:
+                author = parts[0]
+                filename = Path(parts[-1]).stem  # file without .gguf
+                display_name = f"{author}-{filename}"
+            else:
+                display_name = gguf.name
+            models.append({
+                'name': display_name,
+                'path': str(gguf),
+            })
     return models
 
 
