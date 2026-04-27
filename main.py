@@ -172,7 +172,7 @@ def _clean_dead():
 
 @app.route('/')
 def index():
-    return render_template('index.html')
+    return render_template('index.html', MODEL_PORT=MODEL_PORT)
 
 
 @app.route('/api/models')
@@ -324,8 +324,8 @@ def api_vram():
             try:
                 gpus.append({
                     'name': parts[1],
-                    'used': round(int(parts[2]) / 1024, 1),   # MB → GB
-                    'total': round(int(parts[3]) / 1024, 1),
+                    'used': round(int(parts[2]) / 1024, 2),   # MB → GB
+                    'total': round(int(parts[3]) / 1024, 2),
                     'temp': parts[4],
                     'power': parts[5],
                 })

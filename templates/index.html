@@ -284,9 +284,9 @@ function renderModels() {
 }
 
 function hashStr(s) { let h = 0; for (let i = 0; i < s.length; i++) { h = ((h << 5) - h) + s.charCodeAt(i); h |= 0; } return Math.abs(h).toString(36); }
-const MODEL_PORT = ${PORT};
+const MODEL_PORT = {{ MODEL_PORT }};
 
-function escAttr(s) { return s.replace(/'/g, "\\'").replace(/"/g, '"'); }
+function escAttr(s) { return s.replace(/&/g,'&').replace(/</g,'<').replace(/>/g,'>').replace(/"/g,'&#34;').replace(/'/g,"\\'"); }
 
 async function _loadParamsForModel(path) {
     if (savedParamsCache[path]) return savedParamsCache[path];
