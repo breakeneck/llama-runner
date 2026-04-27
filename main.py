@@ -299,6 +299,26 @@ def api_run_model():
     return jsonify({'ok': True, 'pid': proc.pid, 'port': port})
 
 
+@app.route('/api/model-log/<path:path>')
+def api_model_log(path):
+    """Return raw stderr log of a running model."""
+    entry = running_processes.get(path)
+    if not entry:
+        return jsonify({'error': 'Not running'}), 404
+
+    stderr_path = entry.get('stderr_path')
+    if not stderr_path or not os.path.isfile(stderr_path):
+        return jsonify({'lines': ['No log file available']}), 200
+
+    try:
+        with open(stderr_path, 'r', errors='replace') as f:
+            lines = [l.rstrip('\n') for l in f.readlines()]
+    except Exception:
+        lines = []
+
+    return jsonify({'lines': lines})
+
+
 @app.route('/api/model-info/<path:path>')
 def api_model_info(path):
     """Return runtime info (layers loaded) for a running model by parsing stderr log."""

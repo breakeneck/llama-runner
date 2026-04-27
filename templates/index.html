@@ -96,6 +96,14 @@
         .notification-banner .notif-text { color: #9ece6a; font-size: 0.9rem; font-weight: bold; }
         .notification-banner .notif-detail { color: #7aa2f7; font-size: 0.8rem; margin-left: auto; white-space: nowrap; cursor: pointer; }
         .notification-banner .notif-close { background:none;border:none;color:#565f89;font-size:1.2rem;cursor:pointer;padding:0 4px; }
+
+        /* Log Modal */
+        #log-modal { display:none; position:fixed; top:0;left:0;width:100%;height:100%; background:rgba(0,0,0,0.6); z-index:999; justify-content:center; align-items:center; }
+        #log-modal.visible { display:flex; }
+        #log-box { background:#1a1b26; border:1px solid #414868; border-radius:8px; width:80%; max-width:900px; height:75%; display:flex; flex-direction:column; }
+        #log-header { padding:10px 16px; background:#24283b; border-bottom:1px solid #414868; border-radius:8px 8px 0 0; display:flex; justify-content:space-between; align-items:center; color:#7aa2f7; font-weight:bold; }
+        #log-body { flex:1; overflow:auto; padding:10px; font-family:'Courier New',monospace; font-size:0.75rem; line-height:1.4; color:#a9b1d6; white-space:pre-wrap; word-break:break-all; }
+        #log-refresh { background:none;border:1px solid #414868;color:#7aa2f7;padding:3px 10px;border-radius:4px;cursor:pointer;font-size:0.75rem;margin-right:6px; }
     </style>
 </head>
 <body>
@@ -133,6 +141,20 @@
     </table>
 
     <div id="no-models" class="no-models" style="display:none;">No models found. Check MODEL_DIR configuration.</div>
+
+    <!-- Log Modal -->
+    <div id="log-modal">
+        <div id="log-box">
+            <div id="log-header">
+                <span id="log-title">Log</span>
+                <div>
+                    <button class="btn btn-small" id="log-refresh-btn" onclick="fetchModelLog()">⟳ Refresh</button>
+                    <button class="btn btn-small" onclick="hideLogModal()">×</button>
+                </div>
+            </div>
+            <pre id="log-body"></pre>
+        </div>
+    </div>
 </div>
 
 <script>
@@ -300,6 +322,7 @@ function renderModels() {
         html += `<button class="btn btn-primary btn-small" onclick="toggleConfig('${escAttr(model.path)}')">⚙ Config</button>`;
         if (isRunning) {
             html += `<button class="btn btn-danger btn-small" onclick="stopModel('${escAttr(model.path)}')">⏹ Stop</button>`;
+            html += `<button class="btn btn-primary btn-small" onclick="showLogModal('${escAttr(model.path)}', '${model.name}')">📋 Log</button>`;
         } else {
             html += `<button class="btn btn-success btn-small" onclick="runWithSaved('${escAttr(model.path)}', '${h}')">▶ Run</button>`;
         }
@@ -520,6 +543,36 @@ function startModelInfoPoll(path, modelName) {
 function stopModelInfoPoll(path) {
     const timer = _modelInfoPollTimers.get(path);
     if (timer) { clearInterval(timer); _modelInfoPollTimers.delete(path); }
+}
+
+// ── Log Modal ───────────────────────────────────────────────────────────
+
+let _currentLogPath = null;  // path of model currently being viewed in log modal
+
+function showLogModal(path, name) {
+    _currentLogPath = path;
+    document.getElementById('log-title').textContent = `📋 ${name} — Log`;
+    document.getElementById('log-modal').classList.add('visible');
+    fetchModelLog();
+}
+
+function hideLogModal() {
+    document.getElementById('log-modal').classList.remove('visible');
+    _currentLogPath = null;
+}
+
+async function fetchModelLog() {
+    if (!_currentLogPath) return;
+    const bodyEl = document.getElementById('log-body');
+    try {
+        const resp = await fetch('/api/model-log/' + encodeURIComponent(_currentLogPath));
+        const data = await resp.json();
+        bodyEl.textContent = (data.lines || []).join('\n');
+        // Scroll to bottom
+        bodyEl.scrollTop = bodyEl.scrollHeight;
+    } catch (e) {
+        bodyEl.textContent = 'Failed to load log: ' + e.message;
+    }
 }
 
 async function refreshModels() { await loadModelsAndStatus(); }
