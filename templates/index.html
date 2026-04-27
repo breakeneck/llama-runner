@@ -86,6 +86,16 @@
         @keyframes spin { to { transform: rotate(360deg); } }
 
         .no-models { text-align: center; padding: 30px; color: #565f89; font-size: 1rem; }
+
+        /* Notification Banner */
+        .notification-banner {
+            background: #24283b; border: 1px solid #7aa2f7; border-radius: 8px;
+            padding: 10px 16px; margin-bottom: 10px; display: none; align-items: center; gap: 12px;
+        }
+        .notification-banner.visible { display: flex; }
+        .notification-banner .notif-text { color: #9ece6a; font-size: 0.9rem; font-weight: bold; }
+        .notification-banner .notif-detail { color: #7aa2f7; font-size: 0.8rem; margin-left: auto; white-space: nowrap; cursor: pointer; }
+        .notification-banner .notif-close { background:none;border:none;color:#565f89;font-size:1.2rem;cursor:pointer;padding:0 4px; }
     </style>
 </head>
 <body>
@@ -93,7 +103,14 @@
     <!-- Title + VRAM in one row -->
     <div class="header-panel">
         <h1>🦙 Llama Runner</h1>
-        <div id="vram-content" class="gpu-stats">Loading...</div>
+        <div id="vram-content" class="gpu-stats" onclick="refreshVRAM()" title="Click to refresh">Loading...</div>
+    </div>
+
+    <!-- Notification Banner -->
+    <div id="notification-banner" class="notification-banner">
+        <span id="notif-text" class="notif-text"></span>
+        <span id="notif-detail" class="notif-detail"></span>
+        <button class="notif-close" onclick="hideNotification()">×</button>
     </div>
 
     <div class="controls">
@@ -393,6 +410,12 @@ async function doRun(path, h, payload) {
         if (data.ok) {
             msgEl.innerHTML = '<span style="color:#9ece6a">✓ Started</span>';
             refreshVRAM();
+
+            // Look up model name and start polling for layer info
+            const model = allModels.find(m => m.path === path);
+            const modelName = model ? model.name : path;
+            startModelInfoPoll(path, modelName);
+
             setTimeout(() => loadModelsAndStatus(), 2000);
         } else {
             msgEl.innerHTML = `<span style="color:#f7768e">✗ ${data.error || 'Failed'}</span>`;
@@ -411,6 +434,10 @@ async function saveAndShowParams(path, h) {
 }
 
 async function stopModel(path) {
+    // Cancel any active poll for this model and hide notification
+    stopModelInfoPoll(path);
+    hideNotification();
+
     try {
         const resp = await fetch('/api/models/stop', { method: 'POST', headers: {'Content-Type':'application/json'}, body: JSON.stringify({path}) });
         const data = await resp.json();
@@ -419,6 +446,80 @@ async function stopModel(path) {
             setTimeout(() => loadModelsAndStatus(), 1500);
         }
     } catch (e) { alert('Error stopping model: ' + e.message); }
+}
+
+// ── Notification helpers ────────────────────────────────────────────────
+
+function hideNotification() {
+    document.getElementById('notification-banner').classList.remove('visible');
+}
+
+function showNotification(text, detail) {
+    document.getElementById('notif-text').textContent = text;
+    const detailEl = document.getElementById('notif-detail');
+    if (detail) {
+        detailEl.textContent = detail;
+        detailEl.style.display = '';
+    } else {
+        detailEl.style.display = 'none';
+    }
+    document.getElementById('notification-banner').classList.add('visible');
+}
+
+// ── Model info poller (layers loaded) ──────────────────────────────────
+
+let _modelInfoPollTimers = new Map();  // path -> interval id
+
+function startModelInfoPoll(path, modelName) {
+    // Cancel any existing poll for this model
+    stopModelInfoPoll(path);
+
+    const bannerText = document.getElementById('notif-text');
+    bannerText.innerHTML = '<span class="spinner"></span> Loading layers...';
+
+    // Show immediately with spinner
+    showNotification(`⏳ ${modelName} starting…`, 'Waiting for layer info…');
+
+    let attempts = 0;
+    const maxAttempts = 60; // poll up to 60 seconds (1s interval)
+
+    const timer = setInterval(async () => {
+        attempts++;
+        try {
+            const resp = await fetch('/api/model-info/' + encodeURIComponent(path));
+            if (!resp.ok) return;
+            const info = await resp.json();
+
+            if (info.layers_loaded != null) {
+                // Got layer count! Show notification with detail.
+                let detailParts = [];
+                if (info.vram_per_gpu_gib && info.vram_per_gpu_gib.length > 0) {
+                    detailParts.push(`VRAM: ${info.vram_per_gpu_gib.join(' + ')} GiB`);
+                }
+                showNotification(
+                    `✓ ${modelName}: ${info.layers_loaded} layers loaded`,
+                    detailParts.join(' · ') || null
+                );
+                clearInterval(timer);
+                stopModelInfoPoll(path);
+            } else if (attempts >= maxAttempts) {
+                // Timeout — still show something
+                showNotification(`✓ ${modelName} running`, 'Layer info unavailable');
+                clearInterval(timer);
+                stopModelInfoPoll(path);
+            } else {
+                // Still loading — update spinner text with attempt count
+                bannerText.innerHTML = `<span class="spinner"></span> Loading layers… (${attempts}s)`;
+            }
+        } catch (e) { /* silently retry */ }
+    }, 1000);
+
+    _modelInfoPollTimers.set(path, timer);
+}
+
+function stopModelInfoPoll(path) {
+    const timer = _modelInfoPollTimers.get(path);
+    if (timer) { clearInterval(timer); _modelInfoPollTimers.delete(path); }
 }
 
 async function refreshModels() { await loadModelsAndStatus(); }

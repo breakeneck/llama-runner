@@ -274,11 +274,15 @@ def api_run_model():
     if data.get('n_gpu_layers_enabled'):
         cmd.extend(['--n-gpu-layers', str(int(data.get('n_gpu_layers', 999)))])
 
+    import tempfile
+    stderr_file = tempfile.NamedTemporaryFile(prefix='llama_', suffix='.log', delete=False)
+    stderr_file.close()
+
     try:
         proc = subprocess.Popen(
             cmd,
             stdout=subprocess.DEVNULL,
-            stderr=subprocess.DEVNULL,
+            stderr=open(stderr_file.name, 'w'),
             start_new_session=True,
         )
     except Exception as exc:
@@ -288,10 +292,46 @@ def api_run_model():
         'pid': proc.pid,
         'proc': proc,
         'port': port,
+        'stderr_path': stderr_file.name,
         **{k: data[k] for k in ('ctx_size', 'temp', 'cache_type_k', 'cache_type_v', 'n_gpu_layers') if k in data},
     }
 
     return jsonify({'ok': True, 'pid': proc.pid, 'port': port})
+
+
+@app.route('/api/model-info/<path:path>')
+def api_model_info(path):
+    """Return runtime info (layers loaded) for a running model by parsing stderr log."""
+    entry = running_processes.get(path)
+    if not entry:
+        return jsonify({'error': 'Not running'}), 404
+
+    layers_loaded = None
+    vram_used_per_gpu = []
+    stderr_path = entry.get('stderr_path')
+    if stderr_path and os.path.isfile(stderr_path):
+        try:
+            with open(stderr_path, 'r', errors='replace') as f:
+                lines = f.readlines()
+
+            for line in reversed(lines[-200:]):  # scan last 200 lines
+                # "llama_model_loader: loaded meta data..." — skip
+                # Look for layer offload summary like "xxx layers were offloaded to GPU"
+                m = re.search(r'(\d+)\s+layers?\s+were\s+offloaded', line, re.IGNORECASE)
+                if m:
+                    layers_loaded = int(m.group(1))
+                # VRAM per layer/gpu summary like "GPU0: X.XX GiB" or "RAM: X.XX GiB"
+                m2 = re.search(r'GPU\d+\:\s+([\d.]+)\s+GiB', line)
+                if m2:
+                    vram_used_per_gpu.append(float(m2.group(1)))
+
+        except Exception:
+            pass
+
+    return jsonify({
+        'layers_loaded': layers_loaded,
+        'vram_per_gpu_gib': vram_used_per_gpu,
+    })
 
 
 @app.route('/api/models/stop', methods=['POST'])
