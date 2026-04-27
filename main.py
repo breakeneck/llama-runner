@@ -4,6 +4,7 @@
 import json
 import os
 import re
+import signal
 import subprocess
 from pathlib import Path
 
@@ -130,10 +131,14 @@ def _scan_models() -> list[dict]:
             if key in seen_split_dirs and gguf != sorted(split_groups[d])[0]:
                 continue  # skip non-first parts of split models
             display_name = f"{gguf.parent.name}-{_SPLIT_RE.sub('', gguf.stem)}"
+            # Sum sizes of all split parts
+            total_bytes = sum(f.stat().st_size for f in split_groups[d])
+            size_gb = round(total_bytes / (1024 ** 3), 2)
             models.append({
                 'name': display_name,
                 'path': str(gguf),
                 'mtime': mtime,
+                'size_gb': size_gb,
                 'split_parts': len(split_groups[d]),
             })
         else:
@@ -145,10 +150,12 @@ def _scan_models() -> list[dict]:
                 display_name = f"{author}-{filename}"
             else:
                 display_name = gguf.name
+            size_gb = round(gguf.stat().st_size / (1024 ** 3), 2)
             models.append({
                 'name': display_name,
                 'path': str(gguf),
                 'mtime': mtime,
+                'size_gb': size_gb,
             })
     return models
 
@@ -166,6 +173,26 @@ def _clean_dead():
     dead = [p for p, v in running_processes.items() if not _is_alive(v['pid'])]
     for p in dead:
         del running_processes[p]
+
+
+def _stop_all_models():
+    """Kill all running llama-server processes."""
+    for path, entry in list(running_processes.items()):
+        proc = entry['proc']
+        try:
+            os.killpg(os.getpgid(proc.pid), signal.SIGKILL)
+            print(f"  Stopped model: {path} (pid {proc.pid})")
+        except Exception as e:
+            print(f"  Failed to stop {path}: {e}")
+    running_processes.clear()
+
+
+def _signal_handler(signum, frame):
+    """Handle SIGINT/SIGTERM: stop all models and exit."""
+    print("\\n🛑 Shutting down Llama Runner...")
+    _stop_all_models()
+    print("✓ All models stopped. Goodbye!")
+    os._exit(0)
 
 
 # ── Routes ──────────────────────────────────────────────────────────────
@@ -340,6 +367,10 @@ def api_vram():
 # ── Entrypoint ──────────────────────────────────────────────────────────
 
 if __name__ == '__main__':
+    # Register signal handlers for graceful shutdown (Ctrl+C / kill)
+    signal.signal(signal.SIGINT, _signal_handler)
+    signal.signal(signal.SIGTERM, _signal_handler)
+
     print(f"🦙 Llama Runner starting on {HOST}:{PORT}")
     print(f"   Model directory: {MODEL_DIR}")
     app.run(host=HOST, port=PORT, debug=False)

@@ -9,14 +9,14 @@
         body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; background: #1a1b26; color: #a9b1d6; min-height: 100vh; }
         .container { max-width: 1400px; margin: 0 auto; padding: 16px; }
 
-        h1 { color: #7aa2f7; font-size: 1.4rem; margin-bottom: 8px; }
+        h1 { color: #7aa2f7; font-size: 1.4rem; margin: 0; white-space: nowrap; }
 
         /* Combined Header Panel */
         .header-panel {
             background: #24283b; border: 1px solid #414868; border-radius: 8px;
             padding: 12px 16px; margin-bottom: 10px;
+            display: flex; align-items: center; justify-content: space-between; gap: 16px;
         }
-        .header-top { display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px; }
         .gpu-stats { display: flex; gap: 16px; font-size: 0.85rem; flex-wrap: wrap; }
         .gpu-stat { color: #a9b1d6; }
         .gpu-stat span { color: #7aa2f7; font-weight: bold; }
@@ -90,10 +90,9 @@
 </head>
 <body>
 <div class="container">
-    <h1>🦙 Llama Runner</h1>
-
-    <!-- Combined Header: GPU + Search -->
+    <!-- Title + VRAM in one row -->
     <div class="header-panel">
+        <h1>🦙 Llama Runner</h1>
         <div id="vram-content" class="gpu-stats">Loading...</div>
     </div>
 
@@ -106,10 +105,11 @@
     <table class="model-table">
         <thead>
             <tr>
-                <th style="width:45%" onclick="setSort('name')">Name ↕</th>
+                <th style="width:42%" onclick="setSort('name')">Name ↕</th>
+                <th style="width:10%" onclick="setSort('size')" class="sort-size">Size ↕</th>
                 <th style="width:12%" onclick="setSort('date')">Date ↕</th>
-                <th style="width:10%">Status</th>
-                <th style="width:33%">Actions</th>
+                <th style="width:8%">Status</th>
+                <th style="width:28%">Actions</th>
             </tr>
         </thead>
         <tbody id="model-list"></tbody>
@@ -186,16 +186,21 @@ function getSortedFiltered() {
     const filter = document.getElementById('search-input').value.toLowerCase();
     let filtered = allModels.filter(m => m.name.toLowerCase().includes(filter) || (m.path && m.path.toLowerCase().includes(filter)));
 
-    // Sort
-    filtered.sort((a, b) => {
-        if (sortField === 'name') return a.name.localeCompare(b.name) * sortDir;
-        if (sortField === 'date') {
-            const da = a.mtime || 0;
-            const db = b.mtime || 0;
-            return (da - db) * sortDir;
-        }
-        return 0;
-    });
+        // Sort
+        filtered.sort((a, b) => {
+            if (sortField === 'name') return a.name.localeCompare(b.name) * sortDir;
+            if (sortField === 'size') {
+                const sa = a.size_gb || 0;
+                const sb = b.size_gb || 0;
+                return (sa - sb) * sortDir;
+            }
+            if (sortField === 'date') {
+                const da = a.mtime || 0;
+                const db = b.mtime || 0;
+                return (da - db) * sortDir;
+            }
+            return 0;
+        });
 
     // Pin running models to top while preserving relative order within groups
     const running = filtered.filter(m => runningModels[m.path]);
@@ -216,7 +221,7 @@ function renderModels() {
     }
 
     if (all.length === 0) {
-        tbody.innerHTML = '<tr><td colspan="4" style="text-align:center;color:#565f89;padding:20px;">No models match filter</td></tr>';
+        tbody.innerHTML = '<tr><td colspan="5" style="text-align:center;color:#565f89;padding:20px;">No models match filter</td></tr>';
         document.getElementById('no-models').style.display = 'none';
         return;
     }
@@ -262,12 +267,16 @@ function renderModels() {
         html += `<span id="msg-${h}" style="color:#73daca;font-size:0.75rem;"></span>`;
         html += `</div></div></td>`;
 
-        // Status column
-        html += `<td><span class="status ${statusClass}">${statusText}</span></td>`;
+        // Size column
+        const size = model.size_gb ? `${model.size_gb} GB` : '—';
+        html += `<td style="color:#a9b1d6;font-size:0.8rem;">${size}</td>`;
 
         // Date column
         const mtime = model.mtime ? new Date(model.mtime).toLocaleDateString() : '—';
         html += `<td style="color:#565f89;font-size:0.75rem;">${mtime}</td>`;
+
+        // Status column
+        html += `<td><span class="status ${statusClass}">${statusText}</span></td>`;
 
         // Actions column
         html += `<td style="display:flex;gap:4px;flex-wrap:wrap;">`;
