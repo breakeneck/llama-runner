@@ -88,8 +88,11 @@ def get_model_params(path: str) -> dict:
             val = str(val)
         result[key] = val
         # enable flag defaults to True unless explicitly saved otherwise
+        # cache_type_k and cache_type_v default to False (disabled)
         if key in _TOGGLED_PARAMS:
-            result[f'{key}_enabled'] = bool(saved.get(f'{key}_enabled', True))
+            cache_keys = {'cache_type_k', 'cache_type_v'}
+            default_enabled = False if key in cache_keys else True
+            result[f'{key}_enabled'] = bool(saved.get(f'{key}_enabled', default_enabled))
     return result
 
 
@@ -169,6 +172,8 @@ def _scan_models() -> list[dict]:
                 'mtime': mtime,
                 'size_gb': size_gb,
             })
+    # Sort by modification time, newest first
+    models.sort(key=lambda m: m['mtime'], reverse=True)
     return models
 
 
