@@ -808,6 +808,11 @@ function startModelStatusPoll(path, modelName) {
                 /model loading error/,
                 /llama_model_load: error/,
                 /srv.*failed to load model/,
+                /failed to initialize the context/,
+                /failed to create context/,
+                /llama_init_from_model: failed/,
+                /common_init_from_params: failed/,
+                /common_init_result: failed/,
             ];
 
             for (const line of lines) {

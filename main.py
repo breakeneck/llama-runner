@@ -264,6 +264,7 @@ def api_run_model():
     port = MODEL_PORT
 
     cmd = [
+        'stdbuf', '-oL', '-eL',  # force line-buffered stdout/stderr for real-time log reading
         LLAMA_SERVER_CMD,
         '-m', path,
         '--flash-attn', 'on',
