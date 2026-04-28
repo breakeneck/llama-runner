@@ -2,3 +2,4 @@
 .env
 logs/
 model_params.json
+run_history.json

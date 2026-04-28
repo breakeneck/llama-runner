@@ -221,6 +221,24 @@ document.addEventListener('DOMContentLoaded', () => {
     loadModelsAndStatus();
 });
 
+async function loadPersistentRunStates() {
+    try {
+        const resp = await fetch('/api/run-states');
+        const history = await resp.json();
+        // Restore persistent states for models that are NOT currently running
+        for (const [path, state] of Object.entries(history)) {
+            if (runningModels[path]) continue;  // live status takes priority
+            if (state.status === 'error') {
+                modelLoadStates[path] = 'error';
+            } else if (state.status === 'stopped') {
+                // No special state needed
+                delete modelLoadStates[path];
+            }
+            // 'running' in history but not in live runningModels = stale, already cleaned server-side
+        }
+    } catch (e) { /* ignore on startup */ }
+}
+
 async function refreshVRAM() {
     try {
         const resp = await fetch('/api/vram');
@@ -261,6 +279,8 @@ async function loadModelsAndStatus() {
         for (const m of status.running) {
             runningModels[m.path] = m;
         }
+        // Restore persistent error states from server
+        await loadPersistentRunStates();
         renderModels();
     } catch (e) { console.error('Failed to load:', e); }
 }
@@ -273,7 +293,19 @@ function setSort(field) {
 
 function getSortedFiltered() {
     const filter = document.getElementById('search-input').value.toLowerCase();
-    let filtered = allModels.filter(m => m.name.toLowerCase().includes(filter) || (m.path && m.path.toLowerCase().includes(filter)));
+
+    // Find the currently running model path (so we can always show it)
+    let currentlyRunningPath = null;
+    for (const path of Object.keys(runningModels)) {
+        currentlyRunningPath = path;
+        break;
+    }
+
+    let filtered = allModels.filter(m => {
+        // Always include the currently running model, even if it doesn't match filter
+        if (m.path === currentlyRunningPath) return true;
+        return m.name.toLowerCase().includes(filter) || (m.path && m.path.toLowerCase().includes(filter));
+    });
 
         // Sort
         filtered.sort((a, b) => {
@@ -792,6 +824,12 @@ function startModelStatusPoll(path, modelName) {
                 modelLoadStates[path] = 'running';
                 clearInterval(timer);
                 stopModelInfoPoll(path);
+                // Notify server so it records 'running' in persistent history
+                fetch('/api/models/run-success', {
+                    method: 'POST',
+                    headers: {'Content-Type': 'application/json'},
+                    body: JSON.stringify({path})
+                }).catch(() => {});
                 hideNotification();
                 // Update runningModels to reflect current state
                 loadModelsAndStatus();
@@ -823,6 +861,12 @@ function startModelStatusPoll(path, modelName) {
                         clearInterval(timer);
                         stopModelInfoPoll(path);
                         const errorMsg = line.trim().substring(0, 100);
+                        // Notify server so it records 'error' in persistent history
+                        fetch('/api/models/run-error', {
+                            method: 'POST',
+                            headers: {'Content-Type': 'application/json'},
+                            body: JSON.stringify({path, error: errorMsg})
+                        }).catch(() => {});
                         showNotification(`✗ ${modelName}: load failed`, errorMsg);
                         renderModels();
                         return;

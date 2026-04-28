@@ -43,6 +43,7 @@ app = Flask(__name__)
 
 # ── Per-model parameter persistence ─────────────────────────────────────
 _PARAMS_FILE = Path(__file__).parent / 'model_params.json'
+_RUN_HISTORY_FILE = Path(__file__).parent / 'run_history.json'
 
 _DEFAULT_PARAMS = {
     'ctx_size': 100,          # shorthand: 100 means 100k
@@ -69,6 +70,46 @@ def _load_params() -> dict:
 def _save_params(params: dict):
     """Persist per-model parameters to disk."""
     _PARAMS_FILE.write_text(json.dumps(params, indent=2))
+
+
+def _load_run_history() -> dict:
+    """Load run history from disk. Returns {path: {status, timestamp, error, ...}}."""
+    if _RUN_HISTORY_FILE.exists():
+        try:
+            return json.loads(_RUN_HISTORY_FILE.read_text())
+        except (json.JSONDecodeError, OSError):
+            return {}
+    return {}
+
+
+def _save_run_history(history: dict):
+    """Persist run history to disk."""
+    _RUN_HISTORY_FILE.write_text(json.dumps(history, indent=2))
+
+
+def update_run_history(path: str, status: str, error: str = None):
+    """Record a run attempt in history. Only count as 'running' if actually successful."""
+    import time
+    history = _load_run_history()
+    entry = {
+        'status': status,          # 'running', 'error', 'stopped'
+        'timestamp': int(time.time() * 1000),
+    }
+    if error:
+        entry['error'] = error
+    history[path] = entry
+
+    # Also update last_run in params for ordering (only for successful runs)
+    if status == 'running':
+        save_model_params(path, {'last_run': entry['timestamp']})
+
+    _save_run_history(history)
+
+
+def get_model_run_state(path: str) -> dict:
+    """Get the last known run state for a model from persistent history."""
+    history = _load_run_history()
+    return history.get(path, {})
 
 
 def get_model_params(path: str) -> dict:
@@ -314,10 +355,31 @@ def api_run_model():
         **{k: data[k] for k in ('ctx_size', 'temp', 'cache_type_k', 'cache_type_v', 'n_gpu_layers') if k in data},
     }
 
-    # Record last_run timestamp for ordering
-    save_model_params(path, {'last_run': int(__import__('time').time() * 1000)})
+    # Record in run history (process started, but not yet confirmed running)
+    update_run_history(path, 'starting')
 
     return jsonify({'ok': True, 'pid': proc.pid, 'port': port})
+
+
+@app.route('/api/models/run-success', methods=['POST'])
+def api_run_success():
+    """Called by frontend when model confirms it's actually running (server listening detected)."""
+    data = request.get_json(force=True)
+    path = data.get('path', '')
+    if path:
+        update_run_history(path, 'running')
+    return jsonify({'ok': True})
+
+
+@app.route('/api/models/run-error', methods=['POST'])
+def api_run_error():
+    """Called by frontend when model fails to start (error detected in logs)."""
+    data = request.get_json(force=True)
+    path = data.get('path', '')
+    error = data.get('error', 'Unknown error')
+    if path:
+        update_run_history(path, 'error', error)
+    return jsonify({'ok': True})
 
 
 @app.route('/api/model-log/<path:path>')
@@ -417,6 +479,9 @@ def api_stop_model():
         except Exception:
             pass
 
+    # Record as stopped in history
+    update_run_history(path, 'stopped')
+
     return jsonify({'ok': True})
 
 
@@ -435,6 +500,21 @@ def api_save_model_params():
     params = {k: v for k, v in data.items() if k != 'path'}
     save_model_params(path, params)
     return jsonify({'ok': True})
+
+
+@app.route('/api/run-states')
+def api_run_states():
+    """Return persistent run states for all models."""
+    history = _load_run_history()
+    # Cross-reference with currently running processes to clear stale states
+    _clean_dead()
+    for path in list(history.keys()):
+        if path not in running_processes and history[path]['status'] == 'running':
+            # Process died without proper stop - mark as stopped
+            history[path]['status'] = 'stopped'
+            history[path]['timestamp'] = int(__import__('time').time() * 1000)
+            _save_run_history(history)
+    return jsonify(history)
 
 
 @app.route('/api/vram')
