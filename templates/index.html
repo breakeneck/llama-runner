@@ -322,10 +322,11 @@ function renderModels() {
         html += `<button class="btn btn-primary btn-small" onclick="toggleConfig('${escAttr(model.path)}')">⚙ Config</button>`;
         if (isRunning) {
             html += `<button class="btn btn-danger btn-small" onclick="stopModel('${escAttr(model.path)}')">⏹ Stop</button>`;
-            html += `<button class="btn btn-primary btn-small" onclick="showLogModal('${escAttr(model.path)}', '${model.name}')">📋 Log</button>`;
         } else {
             html += `<button class="btn btn-success btn-small" onclick="runWithSaved('${escAttr(model.path)}', '${h}')">▶ Run</button>`;
         }
+        // Log button always visible — log file persists across runs
+        html += `<button class="btn btn-primary btn-small" onclick="showLogModal('${escAttr(model.path)}', '${model.name}')">📋 Log</button>`;
         html += `</td></tr>`;
     }
     tbody.innerHTML = html;

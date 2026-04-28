@@ -8,6 +8,16 @@ import signal
 import subprocess
 from pathlib import Path
 
+# ── Log directory: persistent per-model logs ─────────────────────────────
+LOG_DIR = Path(__file__).parent / 'logs'
+LOG_DIR.mkdir(exist_ok=True)
+
+
+def _log_path_for_model(model_path: str) -> Path:
+    """Return a persistent log path like logs/<modelname>.log for a model."""
+    stem = Path(model_path).stem  # e.g., 'Qwen2.5-7B-Instruct-Q4_K_M'
+    return LOG_DIR / f'{stem}.log'
+
 from dotenv import load_dotenv
 from flask import Flask, jsonify, render_template, request
 
@@ -274,25 +284,26 @@ def api_run_model():
     if data.get('n_gpu_layers_enabled'):
         cmd.extend(['--n-gpu-layers', str(int(data.get('n_gpu_layers', 999)))])
 
-    import tempfile
-    stderr_file = tempfile.NamedTemporaryFile(prefix='llama_', suffix='.log', delete=False)
-    stderr_file.close()
+    # Use a persistent log file named after the model (overwritten each run)
+    log_path = _log_path_for_model(path)
+    log_file = open(log_path, 'w')
 
     try:
         proc = subprocess.Popen(
             cmd,
-            stdout=subprocess.DEVNULL,
-            stderr=open(stderr_file.name, 'w'),
+            stdout=log_file,
+            stderr=log_file,
             start_new_session=True,
         )
     except Exception as exc:
+        log_file.close()
         return jsonify({'ok': False, 'error': str(exc)}), 500
 
     running_processes[path] = {
         'pid': proc.pid,
         'proc': proc,
         'port': port,
-        'stderr_path': stderr_file.name,
+        'log_path': str(log_path),
         **{k: data[k] for k in ('ctx_size', 'temp', 'cache_type_k', 'cache_type_v', 'n_gpu_layers') if k in data},
     }
 
@@ -301,17 +312,24 @@ def api_run_model():
 
 @app.route('/api/model-log/<path:path>')
 def api_model_log(path):
-    """Return raw stderr log of a running model."""
+    """Return log for a model. Works for both running and previously-run models."""
+    # First check running process log_path
+    log_path = None
     entry = running_processes.get(path)
-    if not entry:
-        return jsonify({'error': 'Not running'}), 404
+    if entry:
+        log_path = entry.get('log_path')
 
-    stderr_path = entry.get('stderr_path')
-    if not stderr_path or not os.path.isfile(stderr_path):
+    # Fall back to derived persistent log path
+    if not log_path or not os.path.isfile(log_path):
+        derived = _log_path_for_model(path)
+        if derived.is_file():
+            log_path = str(derived)
+
+    if not log_path or not os.path.isfile(log_path):
         return jsonify({'lines': ['No log file available']}), 200
 
     try:
-        with open(stderr_path, 'r', errors='replace') as f:
+        with open(log_path, 'r', errors='replace') as f:
             lines = [l.rstrip('\n') for l in f.readlines()]
     except Exception:
         lines = []
@@ -321,17 +339,17 @@ def api_model_log(path):
 
 @app.route('/api/model-info/<path:path>')
 def api_model_info(path):
-    """Return runtime info (layers loaded) for a running model by parsing stderr log."""
+    """Return runtime info (layers loaded) for a running model by parsing log."""
     entry = running_processes.get(path)
     if not entry:
         return jsonify({'error': 'Not running'}), 404
 
     layers_loaded = None
     vram_used_per_gpu = []
-    stderr_path = entry.get('stderr_path')
-    if stderr_path and os.path.isfile(stderr_path):
+    log_path = entry.get('log_path')
+    if log_path and os.path.isfile(log_path):
         try:
-            with open(stderr_path, 'r', errors='replace') as f:
+            with open(log_path, 'r', errors='replace') as f:
                 lines = f.readlines()
 
             for line in reversed(lines[-200:]):  # scan last 200 lines
@@ -340,10 +358,15 @@ def api_model_info(path):
                 m = re.search(r'(\d+)\s+layers?\s+were\s+offloaded', line, re.IGNORECASE)
                 if m:
                     layers_loaded = int(m.group(1))
+                # Also match "llama_build_kv_cache: ... (K cache)" / V cache lines — skip
                 # VRAM per layer/gpu summary like "GPU0: X.XX GiB" or "RAM: X.XX GiB"
                 m2 = re.search(r'GPU\d+\:\s+([\d.]+)\s+GiB', line)
                 if m2:
                     vram_used_per_gpu.append(float(m2.group(1)))
+                # Also match total VRAM line: "llm_load_tensors: ... VRAM used ..."
+                m3 = re.search(r'VRAM used\:\s+([\d.]+)\s+MiB', line)
+                if m3:
+                    pass  # can be added later if needed
 
         except Exception:
             pass
