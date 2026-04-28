@@ -40,6 +40,8 @@
         .btn-success:hover { background: #8abf5b; }
         .btn-danger { background: #f7768e; color: #1a1b26; }
         .btn-danger:hover { background: #e0647c; }
+        .btn-warning { background: #e0af68; color: #1a1b26; }
+        .btn-warning:hover { background: #cfa35a; }
         .btn-small { padding: 4px 8px; font-size: 0.75rem; }
         .btn:disabled { opacity: 0.4; cursor: not-allowed; }
         .btn-copy { background: #414868; color: #a9b1d6; padding: 3px 6px; font-size: 0.7rem; border-radius: 4px; }
@@ -78,9 +80,11 @@
         .form-group.disabled input:not([type="checkbox"]) { opacity: 0.3; }
 
         /* Status */
-        .status { display: inline-block; padding: 2px 8px; border-radius: 10px; font-size: 0.7rem; font-weight: bold; white-space: nowrap; }
+        .status { display: inline-block; padding: 2px 8px; border-radius: 10px; font-size: 0.7rem; font-weight: bold; white-space: nowrap; cursor: pointer; }
         .status-stopped { background: #414868; color: #a9b1d6; }
         .status-running { background: #9ece6a; color: #1a1b26; animation: pulse 2s infinite; }
+        .status-loading { background: #e0af68; color: #1a1b26; animation: pulse 1s infinite; }
+        .status-error { background: #f7768e; color: #1a1b26; }
 
         @keyframes pulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.7; } }
 
@@ -99,6 +103,28 @@
         .notification-banner .notif-text { color: #9ece6a; font-size: 0.9rem; font-weight: bold; }
         .notification-banner .notif-detail { color: #7aa2f7; font-size: 0.8rem; margin-left: auto; white-space: nowrap; cursor: pointer; }
         .notification-banner .notif-close { background:none;border:none;color:#565f89;font-size:1.2rem;cursor:pointer;padding:0 4px; }
+
+        /* Toast */
+        .toast-container { position: fixed; top: 16px; right: 16px; z-index: 10000; display: flex; flex-direction: column; gap: 8px; }
+        .toast {
+            background: #24283b; border: 1px solid #7aa2f7; border-radius: 8px;
+            padding: 10px 16px; color: #c0caf5; font-size: 0.85rem;
+            box-shadow: 0 4px 12px rgba(0,0,0,0.4); animation: toastIn 0.3s ease;
+            display: flex; align-items: center; gap: 8px;
+        }
+        .toast.success { border-color: #9ece6a; }
+        .toast.error { border-color: #f7768e; }
+        .toast.info { border-color: #7aa2f7; }
+        @keyframes toastIn { from { opacity: 0; transform: translateX(40px); } to { opacity: 1; transform: translateX(0); } }
+        @keyframes toastOut { from { opacity: 1; transform: translateX(0); } to { opacity: 0; transform: translateX(40px); } }
+
+        /* Modal */
+        .modal-overlay { display:none; position:fixed; top:0;left:0;width:100%;height:100%; background:rgba(0,0,0,0.7); z-index:9999; justify-content:center; align-items:center; }
+        .modal-overlay.visible { display:flex; }
+        .modal-box { background:#1a1b26; border:1px solid #414868; border-radius:8px; max-width:500px; width:90%; }
+        .modal-header { padding:12px 16px; background:#24283b; border-bottom:1px solid #414868; border-radius:8px 8px 0 0; display:flex; justify-content:space-between; align-items:center; color:#7aa2f7; font-weight:bold; }
+        .modal-body { padding:16px; color:#a9b1d6; font-size:0.9rem; line-height:1.5; }
+        .modal-footer { padding:12px 16px; background:#24283b; border-top:1px solid #414868; border-radius:0 0 8px 8px; display:flex; justify-content:flex-end; gap:8px; }
 
         /* Log Modal */
         #log-modal { display:none; position:fixed; top:0;left:0;width:100%;height:100%; background:rgba(0,0,0,0.6); z-index:999; justify-content:center; align-items:center; }
@@ -133,11 +159,12 @@
     <table class="model-table">
         <thead>
             <tr>
-                <th style="width:42%" onclick="setSort('name')">Name ↕</th>
-                <th style="width:10%" onclick="setSort('size')" class="sort-size">Size ↕</th>
-                <th style="width:12%" onclick="setSort('date')">Date ↕</th>
-                <th style="width:8%">Status</th>
-                <th style="width:28%">Actions</th>
+                <th style="width:35%" onclick="setSort('name')">Name ↕</th>
+                <th style="width:8%" onclick="setSort('size')" class="sort-size">Size ↕</th>
+                <th style="width:8%" onclick="setSort('date')">Date ↕</th>
+                <th style="width:10%">Context</th>
+                <th style="width:10%">Status</th>
+                <th style="width:29%">Actions</th>
             </tr>
         </thead>
         <tbody id="model-list"></tbody>
@@ -160,6 +187,21 @@
     </div>
 </div>
 
+<!-- Toast Container -->
+<div id="toast-container" class="toast-container"></div>
+
+<!-- Conflict Modal -->
+<div id="conflict-modal" class="modal-overlay">
+    <div id="conflict-box" class="modal-box">
+        <div id="conflict-header" class="modal-header">
+            <span>⚠️ Model Conflict</span>
+            <button class="btn btn-small" onclick="closeConflictModal()">×</button>
+        </div>
+        <div id="conflict-body" class="modal-body"></div>
+        <div id="conflict-footer" class="modal-footer"></div>
+    </div>
+</div>
+
 <script>
 let allModels = [];
 let runningModels = {};
@@ -168,6 +210,11 @@ let sortField = 'name';
 let sortDir = 1;   // 1 = asc, -1 = desc
 let vramInterval = null;
 const modelOrderMap = {};  // path -> original index (for stable re-insertion)
+
+// Model loading states: path -> 'loading' | 'running' | 'error' | 'stopped'
+let modelLoadStates = {};
+// Log poll intervals for loading models
+let _logPollTimers = new Map();  // path -> interval id
 
 document.addEventListener('DOMContentLoaded', () => {
     refreshVRAM();
@@ -245,10 +292,28 @@ function getSortedFiltered() {
         });
 
     // Pin running models to top while preserving relative order within groups
-    const running = filtered.filter(m => runningModels[m.path]);
-    const stopped = filtered.filter(m => !runningModels[m.path]);
+    const running = filtered.filter(m => runningModels[m.path] || modelLoadStates[m.path] === 'loading');
+    const stopped = filtered.filter(m => !runningModels[m.path] && modelLoadStates[m.path] !== 'loading');
 
     return { running, stopped };
+}
+
+function getStatusInfo(model) {
+    const state = modelLoadStates[model.path];
+    const running = runningModels[model.path];
+
+    if (running) {
+        const ctx = running.ctx_size;
+        const ctxDisplay = ctx >= 1000 ? `${(ctx / 1000).toFixed(ctx % 1000 === 0 ? 0 : 1)}k` : `${ctx}`;
+        return { cls: 'status-running', text: `● Running (${ctxDisplay})`, state: 'running' };
+    }
+    if (state === 'loading') {
+        return { cls: 'status-loading', text: '⟳ Loading...', state: 'loading' };
+    }
+    if (state === 'error') {
+        return { cls: 'status-error', text: '✗ Error', state: 'error' };
+    }
+    return { cls: 'status-stopped', text: '○ Stopped', state: 'stopped' };
 }
 
 function renderModels() {
@@ -263,7 +328,7 @@ function renderModels() {
     }
 
     if (all.length === 0) {
-        tbody.innerHTML = '<tr><td colspan="5" style="text-align:center;color:#565f89;padding:20px;">No models match filter</td></tr>';
+        tbody.innerHTML = '<tr><td colspan="6" style="text-align:center;color:#565f89;padding:20px;">No models match filter</td></tr>';
         document.getElementById('no-models').style.display = 'none';
         return;
     }
@@ -272,9 +337,9 @@ function renderModels() {
     let html = '';
     for (const model of all) {
         const running = runningModels[model.path];
-        const statusClass = running ? 'status-running' : 'status-stopped';
-        const statusText = running ? `● ${MODEL_PORT}` : '○ Stopped';
+        const statusInfo = getStatusInfo(model);
         const isRunning = !!running;
+        const isLoading = modelLoadStates[model.path] === 'loading';
         const rowClass = isRunning ? 'model-row running-row' : 'model-row';
         const h = hashStr(model.path);
 
@@ -283,7 +348,6 @@ function renderModels() {
         html += `<span class="model-name" onclick="toggleConfig('${escAttr(model.path)}')">${model.name}</span>`;
         if (model.split_parts) html += ` <span style="font-size:0.65rem;color:#bb9af7;">(${model.split_parts} parts)</span>`;
         html += `<span class="model-path" title="${escAttr(model.path)}">${model.path}</span>`;
-        html += ` <button class="btn btn-copy" onclick="copyModelId('${escAttr(model.path)}', this)" title="Copy model path">📋</button>`;
 
         // Config panel inline
         html += `<div id="config-${h}" class="config-panel">`;
@@ -303,6 +367,9 @@ function renderModels() {
         html += `<div style="display:flex;gap:6px;margin-top:4px;">`;
         if (isRunning) {
             html += `<button class="btn btn-danger btn-small" onclick="stopModel('${escAttr(model.path)}')">⏹ Stop</button>`;
+            html += `<button class="btn btn-warning btn-small" onclick="restartModel('${escAttr(model.path)}', '${h}')">⟳ Restart</button>`;
+        } else if (isLoading) {
+            html += `<button class="btn btn-danger btn-small" disabled><span class="spinner"></span> Starting...</button>`;
         } else {
             html += `<button class="btn btn-success btn-small" onclick="runFromConfig('${escAttr(model.path)}', '${h}')">▶ Run</button>`;
         }
@@ -317,14 +384,21 @@ function renderModels() {
         const mtime = model.mtime ? new Date(model.mtime).toLocaleDateString() : '—';
         html += `<td style="color:#565f89;font-size:0.75rem;">${mtime}</td>`;
 
-        // Status column
-        html += `<td><span class="status ${statusClass}">${statusText}</span></td>`;
+        // Context column
+        const ctxInfo = getContextDisplay(model);
+        html += `<td style="color:#a9b1d6;font-size:0.8rem;text-align:center;">${ctxInfo}</td>`;
+
+        // Status column - clickable to copy model ID
+        html += `<td><span class="status ${statusInfo.cls}" onclick="copyModelIdFromStatus('${escAttr(model.path)}')" title="Click to copy model ID">${statusInfo.text}</span></td>`;
 
         // Actions column
         html += `<td style="display:flex;gap:4px;flex-wrap:wrap;">`;
         html += `<button class="btn btn-primary btn-small" onclick="toggleConfig('${escAttr(model.path)}')">⚙ Config</button>`;
         if (isRunning) {
             html += `<button class="btn btn-danger btn-small" onclick="stopModel('${escAttr(model.path)}')">⏹ Stop</button>`;
+            html += `<button class="btn btn-warning btn-small" onclick="restartModel('${escAttr(model.path)}', '${h}')">⟳ Restart</button>`;
+        } else if (isLoading) {
+            html += `<button class="btn btn-primary btn-small" disabled><span class="spinner"></span> Starting...</button>`;
         } else {
             html += `<button class="btn btn-success btn-small" onclick="runWithSaved('${escAttr(model.path)}', '${h}')">▶ Run</button>`;
         }
@@ -333,6 +407,21 @@ function renderModels() {
         html += `</td></tr>`;
     }
     tbody.innerHTML = html;
+}
+
+function getContextDisplay(model) {
+    const running = runningModels[model.path];
+    if (running && running.ctx_size) {
+        const ctx = running.ctx_size;
+        return ctx >= 1000 ? `${(ctx / 1000).toFixed(ctx % 1000 === 0 ? 0 : 1)}k` : `${ctx}`;
+    }
+    // Try saved params
+    const params = savedParamsCache[model.path];
+    if (params && params.ctx_size != null) {
+        const ctx = params.ctx_size * 1000;  // saved as shorthand (100 = 100k)
+        return ctx >= 1000 ? `${(ctx / 1000).toFixed(ctx % 1000 === 0 ? 0 : 1)}k` : `${ctx}`;
+    }
+    return '—';
 }
 
 function hashStr(s) { let h = 0; for (let i = 0; i < s.length; i++) { h = ((h << 5) - h) + s.charCodeAt(i); h |= 0; } return Math.abs(h).toString(36); }
@@ -408,6 +497,13 @@ function collectConfigFields(path, h) {
 }
 
 async function runWithSaved(path, h) {
+    // Check if another model is running
+    const otherRunning = findOtherRunningModel(path);
+    if (otherRunning) {
+        showConflictModal(otherRunning, path);
+        return;
+    }
+
     // Fetch saved params then run
     const params = await _loadParamsForModel(path);
     if (!params) { toggleConfig(path); return; }  // open config to show defaults
@@ -421,6 +517,13 @@ async function runWithSaved(path, h) {
 }
 
 async function runFromConfig(path, h) {
+    // Check if another model is running
+    const otherRunning = findOtherRunningModel(path);
+    if (otherRunning) {
+        showConflictModal(otherRunning, path);
+        return;
+    }
+
     const config = collectConfigFields(path, h);
     // Auto-save then run
     await _saveParamsForModel(path, config);
@@ -428,9 +531,23 @@ async function runFromConfig(path, h) {
     doRun(path, h, payload);
 }
 
+function findOtherRunningModel(currentPath) {
+    for (const [path, info] of Object.entries(runningModels)) {
+        if (path !== currentPath) {
+            return { path, name: allModels.find(m => m.path === path)?.name || path };
+        }
+    }
+    return null;
+}
+
 async function doRun(path, h, payload) {
     const msgEl = document.getElementById('msg-' + h);
     msgEl.innerHTML = '<span class="spinner"></span> Starting...';
+
+    // Set loading state
+    modelLoadStates[path] = 'loading';
+    renderModels();
+
     try {
         const resp = await fetch('/api/models/run', { method: 'POST', headers: {'Content-Type':'application/json'}, body: JSON.stringify(payload) });
         const data = await resp.json();
@@ -438,17 +555,63 @@ async function doRun(path, h, payload) {
             msgEl.innerHTML = '<span style="color:#9ece6a">✓ Started</span>';
             refreshVRAM();
 
-            // Look up model name and start polling for layer info
+            // Look up model name and start polling for model status
             const model = allModels.find(m => m.path === path);
             const modelName = model ? model.name : path;
-            startModelInfoPoll(path, modelName);
+            startModelStatusPoll(path, modelName);
 
-            setTimeout(() => loadModelsAndStatus(), 2000);
+            // Don't update status yet - wait for log polling to detect success/error
         } else {
             msgEl.innerHTML = `<span style="color:#f7768e">✗ ${data.error || 'Failed'}</span>`;
+            modelLoadStates[path] = 'error';
+            renderModels();
         }
     } catch (e) {
         msgEl.innerHTML = `<span style="color:#f7768e">✗ Error: ${e.message}</span>`;
+        modelLoadStates[path] = 'error';
+        renderModels();
+    }
+}
+
+async function restartModel(path, h) {
+    const modelName = allModels.find(m => m.path === path)?.name || path;
+
+    // Stop the model first
+    stopModelInfoPoll(path);
+    hideNotification();
+
+    try {
+        await fetch('/api/models/stop', { method: 'POST', headers: {'Content-Type':'application/json'}, body: JSON.stringify({path}) });
+    } catch (e) { /* ignore */ }
+
+    // Wait a bit then start again with saved params
+    await new Promise(r => setTimeout(r, 1000));
+
+    const params = await _loadParamsForModel(path);
+    if (!params) return;
+
+    const payload = { path };
+    for (const field of ['ctx_size', 'temp', 'cache_type_k', 'cache_type_v', 'n_gpu_layers']) {
+        payload[`${field}_enabled`] = params[`${field}_enabled`] !== false;
+        payload[field] = params[field];
+    }
+
+    // Set loading state and render
+    modelLoadStates[path] = 'loading';
+    renderModels();
+
+    try {
+        const resp = await fetch('/api/models/run', { method: 'POST', headers: {'Content-Type':'application/json'}, body: JSON.stringify(payload) });
+        const data = await resp.json();
+        if (data.ok) {
+            startModelStatusPoll(path, modelName);
+        } else {
+            modelLoadStates[path] = 'error';
+            renderModels();
+        }
+    } catch (e) {
+        modelLoadStates[path] = 'error';
+        renderModels();
     }
 }
 
@@ -471,6 +634,7 @@ async function stopModel(path) {
     // Cancel any active poll for this model and hide notification
     stopModelInfoPoll(path);
     hideNotification();
+    delete modelLoadStates[path];
 
     try {
         const resp = await fetch('/api/models/stop', { method: 'POST', headers: {'Content-Type':'application/json'}, body: JSON.stringify({path}) });
@@ -482,6 +646,202 @@ async function stopModel(path) {
     } catch (e) { alert('Error stopping model: ' + e.message); }
 }
 
+// ── Toast notifications ─────────────────────────────────────────────────
+
+function showToast(message, type = 'info', duration = 2500) {
+    const container = document.getElementById('toast-container');
+    const toast = document.createElement('div');
+    toast.className = `toast ${type}`;
+    const icon = type === 'success' ? '✓' : type === 'error' ? '✗' : 'ℹ';
+    toast.innerHTML = `<span>${icon}</span><span>${message}</span>`;
+    container.appendChild(toast);
+    setTimeout(() => {
+        toast.style.animation = 'toastOut 0.3s ease forwards';
+        setTimeout(() => toast.remove(), 300);
+    }, duration);
+}
+
+// ── Copy model ID from status field ──────────────────────────────────────
+
+function copyModelIdFromStatus(path) {
+    // Use reliable clipboard copy
+    if (navigator.clipboard && navigator.clipboard.writeText) {
+        navigator.clipboard.writeText(path).then(() => {
+            showToast(`Model ID copied to clipboard`, 'success');
+        }).catch(() => {
+            fallbackCopy(path);
+        });
+    } else {
+        fallbackCopy(path);
+    }
+}
+
+function fallbackCopy(text) {
+    const ta = document.createElement('textarea');
+    ta.value = text;
+    ta.style.position = 'fixed';
+    ta.style.left = '-9999px';
+    document.body.appendChild(ta);
+    ta.select();
+    try {
+        document.execCommand('copy');
+        showToast(`Model ID copied to clipboard`, 'success');
+    } catch (e) {
+        showToast(`Failed to copy: ${e.message}`, 'error');
+    }
+    document.body.removeChild(ta);
+}
+
+// ── Conflict modal ───────────────────────────────────────────────────────
+
+function showConflictModal(runningModel, requestedPath) {
+    const modal = document.getElementById('conflict-modal');
+    const body = document.getElementById('conflict-body');
+    const footer = document.getElementById('conflict-footer');
+
+    const requestedName = allModels.find(m => m.path === requestedPath)?.name || requestedPath;
+
+    body.innerHTML = `
+        <p style="margin-bottom:8px;">Model <strong>${runningModel.name}</strong> is currently running.</p>
+        <p>You cannot run <strong>${requestedName}</strong> until the current model is stopped.</p>
+    `;
+
+    footer.innerHTML = `
+        <button class="btn btn-primary" onclick="closeConflictModal()">Cancel</button>
+        <button class="btn btn-danger" onclick="stopAndStart('${escAttr(runningModel.path)}', '${escAttr(requestedPath)}')">Stop ${runningModel.name} & Start New</button>
+    `;
+
+    modal.classList.add('visible');
+}
+
+function closeConflictModal() {
+    document.getElementById('conflict-modal').classList.remove('visible');
+}
+
+async function stopAndStopStart(stoppedPath, startPath) {
+    closeConflictModal();
+
+    // Stop the running model
+    stopModelInfoPoll(stoppedPath);
+    hideNotification();
+    delete modelLoadStates[stoppedPath];
+
+    try {
+        await fetch('/api/models/stop', { method: 'POST', headers: {'Content-Type':'application/json'}, body: JSON.stringify({path: stoppedPath}) });
+    } catch (e) { /* ignore */ }
+
+    // Wait a moment then start the new model
+    await new Promise(r => setTimeout(r, 1500));
+
+    // Load params and start
+    const startH = hashStr(startPath);
+    const params = await _loadParamsForModel(startPath);
+    if (!params) return;
+
+    const payload = { path: startPath };
+    for (const field of ['ctx_size', 'temp', 'cache_type_k', 'cache_type_v', 'n_gpu_layers']) {
+        payload[`${field}_enabled`] = params[`${field}_enabled`] !== false;
+        payload[field] = params[field];
+    }
+
+    modelLoadStates[startPath] = 'loading';
+    renderModels();
+
+    try {
+        const resp = await fetch('/api/models/run', { method: 'POST', headers: {'Content-Type':'application/json'}, body: JSON.stringify(payload) });
+        const data = await resp.json();
+        if (data.ok) {
+            const modelName = allModels.find(m => m.path === startPath)?.name || startPath;
+            startModelStatusPoll(startPath, modelName);
+        } else {
+            modelLoadStates[startPath] = 'error';
+            renderModels();
+        }
+    } catch (e) {
+        modelLoadStates[startPath] = 'error';
+        renderModels();
+    }
+}
+
+// Wire the conflict modal button to the correct function
+window.stopAndStart = stopAndStopStart;
+
+// ── Model status polling (log-based) ────────────────────────────────────
+
+function startModelStatusPoll(path, modelName) {
+    stopModelInfoPoll(path);
+
+    const bannerText = document.getElementById('notif-text');
+    showNotification(`⏳ ${modelName} starting…`, 'Waiting for model to load…');
+
+    let attempts = 0;
+    const maxAttempts = 120; // poll up to 120 seconds
+
+    const timer = setInterval(async () => {
+        attempts++;
+        try {
+            const resp = await fetch('/api/model-log/' + encodeURIComponent(path));
+            if (!resp.ok) return;
+            const data = await resp.json();
+            const lines = data.lines || [];
+
+            // Check for success: server is listening
+            const successMatch = lines.find(l => l.includes('server is listening on'));
+            if (successMatch) {
+                // Model loaded successfully
+                modelLoadStates[path] = 'running';
+                clearInterval(timer);
+                stopModelInfoPoll(path);
+                hideNotification();
+                // Update runningModels to reflect current state
+                loadModelsAndStatus();
+                return;
+            }
+
+            // Check for errors
+            const errorPatterns = [
+                /cudaMalloc failed:/,
+                /out of memory/i,
+                /failed to allocate/,
+                /error loading model/,
+                /failed to load model/,
+                /model loading error/,
+                /llama_model_load: error/,
+                /srv.*failed to load model/,
+            ];
+
+            for (const line of lines) {
+                for (const pattern of errorPatterns) {
+                    if (pattern.test(line)) {
+                        // Model failed to load
+                        modelLoadStates[path] = 'error';
+                        clearInterval(timer);
+                        stopModelInfoPoll(path);
+                        const errorMsg = line.trim().substring(0, 100);
+                        showNotification(`✗ ${modelName}: load failed`, errorMsg);
+                        renderModels();
+                        return;
+                    }
+                }
+            }
+
+            // Still loading — update notification
+            if (attempts >= maxAttempts) {
+                // Timeout — but model might still be loading, keep status as loading
+                clearInterval(timer);
+                stopModelInfoPoll(path);
+                hideNotification();
+                // Don't change state, keep as loading
+            } else {
+                bannerText.innerHTML = `<span class="spinner"></span> Loading… (${attempts}s)`;
+            }
+
+        } catch (e) { /* silently retry */ }
+    }, 1000);
+
+    _logPollTimers.set(path, timer);
+}
+
 // ── Notification helpers ────────────────────────────────────────────────
 
 function hideNotification() {
@@ -489,7 +849,7 @@ function hideNotification() {
 }
 
 function showNotification(text, detail) {
-    document.getElementById('notif-text').textContent = text;
+    document.getElementById('notif-text').innerHTML = text;
     const detailEl = document.getElementById('notif-detail');
     if (detail) {
         detailEl.textContent = detail;
@@ -500,87 +860,9 @@ function showNotification(text, detail) {
     document.getElementById('notification-banner').classList.add('visible');
 }
 
-// ── Model info poller (layers loaded) ──────────────────────────────────
-
-let _modelInfoPollTimers = new Map();  // path -> interval id
-
-function startModelInfoPoll(path, modelName) {
-    // Cancel any existing poll for this model
-    stopModelInfoPoll(path);
-
-    const bannerText = document.getElementById('notif-text');
-    bannerText.innerHTML = '<span class="spinner"></span> Loading layers...';
-
-    // Show immediately with spinner
-    showNotification(`⏳ ${modelName} starting…`, 'Waiting for layer info…');
-
-    let attempts = 0;
-    const maxAttempts = 60; // poll up to 60 seconds (1s interval)
-
-    const timer = setInterval(async () => {
-        attempts++;
-        try {
-            const resp = await fetch('/api/model-info/' + encodeURIComponent(path));
-            if (!resp.ok) return;
-            const info = await resp.json();
-
-            if (info.layers_loaded != null) {
-                // Got layer count! Show notification with detail.
-                let detailParts = [];
-                if (info.vram_per_gpu_gib && info.vram_per_gpu_gib.length > 0) {
-                    detailParts.push(`VRAM: ${info.vram_per_gpu_gib.join(' + ')} GiB`);
-                }
-                showNotification(
-                    `✓ ${modelName}: ${info.layers_loaded} layers offloaded to GPU`,
-                    detailParts.join(' · ') || null
-                );
-                clearInterval(timer);
-                stopModelInfoPoll(path);
-            } else if (attempts >= maxAttempts) {
-                // Timeout — show error
-                showNotification(`✗ ${modelName}`, '× Layer info unavailable');
-                clearInterval(timer);
-                stopModelInfoPoll(path);
-            } else {
-                // Still loading — update spinner text with attempt count
-                bannerText.innerHTML = `<span class="spinner"></span> Loading layers… (${attempts}s)`;
-            }
-        } catch (e) { /* silently retry */ }
-    }, 1000);
-
-    _modelInfoPollTimers.set(path, timer);
-}
-
-// ── Copy model ID ───────────────────────────────────────────────────────
-
-function copyModelId(path, btn) {
-    navigator.clipboard.writeText(path).then(() => {
-        btn.classList.add('copied');
-        btn.textContent = '✓';
-        setTimeout(() => {
-            btn.classList.remove('copied');
-            btn.textContent = '📋';
-        }, 1500);
-    }).catch(() => {
-        // Fallback for older browsers
-        const ta = document.createElement('textarea');
-        ta.value = path;
-        document.body.appendChild(ta);
-        ta.select();
-        document.execCommand('copy');
-        document.body.removeChild(ta);
-        btn.classList.add('copied');
-        btn.textContent = '✓';
-        setTimeout(() => {
-            btn.classList.remove('copied');
-            btn.textContent = '📋';
-        }, 1500);
-    });
-}
-
 function stopModelInfoPoll(path) {
-    const timer = _modelInfoPollTimers.get(path);
-    if (timer) { clearInterval(timer); _modelInfoPollTimers.delete(path); }
+    const timer = _logPollTimers.get(path);
+    if (timer) { clearInterval(timer); _logPollTimers.delete(path); }
 }
 
 // ── Log Modal ───────────────────────────────────────────────────────────
