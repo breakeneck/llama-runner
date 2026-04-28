@@ -216,10 +216,29 @@ let modelLoadStates = {};
 // Log poll intervals for loading models
 let _logPollTimers = new Map();  // path -> interval id
 
-document.addEventListener('DOMContentLoaded', () => {
+document.addEventListener('DOMContentLoaded', async () => {
+    // Load saved preferences first
+    await loadPreferences();
     refreshVRAM();
     loadModelsAndStatus();
 });
+
+async function loadPreferences() {
+    try {
+        const resp = await fetch('/api/preferences');
+        const prefs = await resp.json();
+        if (prefs.sortField) sortField = prefs.sortField;
+        if (prefs.sortDir !== undefined) sortDir = prefs.sortDir;
+    } catch (e) { /* use defaults */ }
+}
+
+function savePreferences() {
+    fetch('/api/preferences', {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({ sortField, sortDir })
+    }).catch(() => {});
+}
 
 async function loadPersistentRunStates() {
     try {
@@ -230,11 +249,11 @@ async function loadPersistentRunStates() {
             if (runningModels[path]) continue;  // live status takes priority
             if (state.status === 'error') {
                 modelLoadStates[path] = 'error';
-            } else if (state.status === 'stopped') {
-                // No special state needed
+            } else if (state.status === 'stopped' || state.status === 'running') {
+                // For stopped: no special state needed (allows Run button)
+                // For running: server already cleaned stale entries
                 delete modelLoadStates[path];
             }
-            // 'running' in history but not in live runningModels = stale, already cleaned server-side
         }
     } catch (e) { /* ignore on startup */ }
 }
@@ -288,6 +307,7 @@ async function loadModelsAndStatus() {
 function setSort(field) {
     if (sortField === field) sortDir *= -1;
     else { sortField = field; sortDir = 1; }
+    savePreferences();
     renderModels();
 }
 
@@ -421,7 +441,7 @@ function renderModels() {
         html += `<td style="color:#a9b1d6;font-size:0.8rem;text-align:center;">${ctxInfo}</td>`;
 
         // Status column - clickable to copy model ID
-        html += `<td><span class="status ${statusInfo.cls}" onclick="copyModelIdFromStatus('${escAttr(model.path)}')" title="Click to copy model ID">${statusInfo.text}</span></td>`;
+        html += `<td><span class="status ${statusInfo.cls}" onclick="copyModelIdFromStatus('${escAttr(model.name)}')" title="Click to copy model ID">${statusInfo.text}</span></td>`;
 
         // Actions column
         html += `<td style="display:flex;gap:4px;flex-wrap:wrap;">`;

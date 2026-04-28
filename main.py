@@ -502,19 +502,63 @@ def api_save_model_params():
     return jsonify({'ok': True})
 
 
+@app.route('/api/preferences')
+def api_get_preferences():
+    """Get user preferences (sort field, sort direction)."""
+    all_params = _load_params()
+    prefs = all_params.get('_preferences', {})
+    return jsonify({
+        'sortField': prefs.get('sortField', 'name'),
+        'sortDir': prefs.get('sortDir', 1),
+    })
+
+
+@app.route('/api/preferences', methods=['POST'])
+def api_save_preferences():
+    """Save user preferences (sort field, sort direction)."""
+    data = request.get_json(force=True)
+    all_params = _load_params()
+    all_params['_preferences'] = {
+        'sortField': data.get('sortField', 'name'),
+        'sortDir': data.get('sortDir', 1),
+    }
+    _save_params(all_params)
+    return jsonify({'ok': True})
+
+
 @app.route('/api/run-states')
 def api_run_states():
     """Return persistent run states for all models."""
     history = _load_run_history()
     # Cross-reference with currently running processes to clear stale states
     _clean_dead()
+    changed = False
     for path in list(history.keys()):
         if path not in running_processes and history[path]['status'] == 'running':
             # Process died without proper stop - mark as stopped
             history[path]['status'] = 'stopped'
             history[path]['timestamp'] = int(__import__('time').time() * 1000)
-            _save_run_history(history)
+            changed = True
+    if changed:
+        _save_run_history(history)
     return jsonify(history)
+
+
+@app.route('/api/last-running')
+def api_last_running():
+    """Return the last running model path (if still valid)."""
+    history = _load_run_history()
+    last_running = None
+    last_time = 0
+    for path, state in history.items():
+        if state.get('status') == 'running':
+            # Check if it's actually still running
+            entry = running_processes.get(path)
+            if entry and _is_alive(entry['pid']):
+                if state.get('timestamp', 0) > last_time:
+                    last_running = path
+                    last_time = state.get('timestamp', 0)
+    return jsonify({'path': last_running})
 
 
 @app.route('/api/vram')
