@@ -340,39 +340,49 @@ def api_model_log(path):
 @app.route('/api/model-info/<path:path>')
 def api_model_info(path):
     """Return runtime info (layers loaded) for a running model by parsing log."""
-    entry = running_processes.get(path)
-    if not entry:
-        return jsonify({'error': 'Not running'}), 404
+    # Reconstruct full path: the <path:> converter strips leading slashes
+    full_path = '/' + path if not path.startswith('/') else path
+
+    entry = running_processes.get(full_path)
+
+    # Find log_path: try running process first, then derive from model path
+    log_path = None
+    if entry:
+        log_path = entry.get('log_path')
+
+    # Fall back to derived persistent log path (same as api_model_log)
+    if not log_path or not os.path.isfile(log_path):
+        derived = _log_path_for_model(full_path)
+        if derived.is_file():
+            log_path = str(derived)
+
+    if not log_path or not os.path.isfile(log_path):
+        return jsonify({'error': 'No log file available'}), 404
 
     layers_loaded = None
+    layers_total = None
     vram_used_per_gpu = []
-    log_path = entry.get('log_path')
-    if log_path and os.path.isfile(log_path):
-        try:
-            with open(log_path, 'r', errors='replace') as f:
-                lines = f.readlines()
+    try:
+        with open(log_path, 'r', errors='replace') as f:
+            lines = f.readlines()
 
-            for line in reversed(lines[-200:]):  # scan last 200 lines
-                # "llama_model_loader: loaded meta data..." — skip
-                # Look for layer offload summary like "xxx layers were offloaded to GPU"
-                m = re.search(r'(\d+)\s+layers?\s+were\s+offloaded', line, re.IGNORECASE)
-                if m:
-                    layers_loaded = int(m.group(1))
-                # Also match "llama_build_kv_cache: ... (K cache)" / V cache lines — skip
-                # VRAM per layer/gpu summary like "GPU0: X.XX GiB" or "RAM: X.XX GiB"
-                m2 = re.search(r'GPU\d+\:\s+([\d.]+)\s+GiB', line)
-                if m2:
-                    vram_used_per_gpu.append(float(m2.group(1)))
-                # Also match total VRAM line: "llm_load_tensors: ... VRAM used ..."
-                m3 = re.search(r'VRAM used\:\s+([\d.]+)\s+MiB', line)
-                if m3:
-                    pass  # can be added later if needed
+        for line in lines:
+            # Match "load_tensors: offloaded 65/65 layers to GPU"
+            m = re.search(r'offloaded\s+(\d+)/(\d+)\s+layers?\s+to\s+GPU', line)
+            if m:
+                layers_loaded = int(m.group(1))
+                layers_total = int(m.group(2))
+            # VRAM per GPU summary like "GPU0: X.XX GiB"
+            m2 = re.search(r'GPU\d+\:\s+([\d.]+)\s+GiB', line)
+            if m2:
+                vram_used_per_gpu.append(float(m2.group(1)))
 
-        except Exception:
-            pass
+    except Exception:
+        pass
 
     return jsonify({
         'layers_loaded': layers_loaded,
+        'layers_total': layers_total,
         'vram_per_gpu_gib': vram_used_per_gpu,
     })
 

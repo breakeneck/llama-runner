@@ -42,6 +42,9 @@
         .btn-danger:hover { background: #e0647c; }
         .btn-small { padding: 4px 8px; font-size: 0.75rem; }
         .btn:disabled { opacity: 0.4; cursor: not-allowed; }
+        .btn-copy { background: #414868; color: #a9b1d6; padding: 3px 6px; font-size: 0.7rem; border-radius: 4px; }
+        .btn-copy:hover { background: #7aa2f7; color: #1a1b26; }
+        .btn-copy.copied { background: #9ece6a; color: #1a1b26; }
 
         /* Model Table */
         .model-table { width: 100%; border-collapse: collapse; font-size: 0.85rem; }
@@ -280,6 +283,7 @@ function renderModels() {
         html += `<span class="model-name" onclick="toggleConfig('${escAttr(model.path)}')">${model.name}</span>`;
         if (model.split_parts) html += ` <span style="font-size:0.65rem;color:#bb9af7;">(${model.split_parts} parts)</span>`;
         html += `<span class="model-path" title="${escAttr(model.path)}">${model.path}</span>`;
+        html += ` <button class="btn btn-copy" onclick="copyModelId('${escAttr(model.path)}', this)" title="Copy model path">📋</button>`;
 
         // Config panel inline
         html += `<div id="config-${h}" class="config-panel">`;
@@ -521,14 +525,14 @@ function startModelInfoPoll(path, modelName) {
                     detailParts.push(`VRAM: ${info.vram_per_gpu_gib.join(' + ')} GiB`);
                 }
                 showNotification(
-                    `✓ ${modelName}: ${info.layers_loaded} layers loaded`,
+                    `✓ ${modelName}: ${info.layers_loaded} layers offloaded to GPU`,
                     detailParts.join(' · ') || null
                 );
                 clearInterval(timer);
                 stopModelInfoPoll(path);
             } else if (attempts >= maxAttempts) {
-                // Timeout — still show something
-                showNotification(`✓ ${modelName} running`, 'Layer info unavailable');
+                // Timeout — show error
+                showNotification(`✗ ${modelName}`, '× Layer info unavailable');
                 clearInterval(timer);
                 stopModelInfoPoll(path);
             } else {
@@ -539,6 +543,33 @@ function startModelInfoPoll(path, modelName) {
     }, 1000);
 
     _modelInfoPollTimers.set(path, timer);
+}
+
+// ── Copy model ID ───────────────────────────────────────────────────────
+
+function copyModelId(path, btn) {
+    navigator.clipboard.writeText(path).then(() => {
+        btn.classList.add('copied');
+        btn.textContent = '✓';
+        setTimeout(() => {
+            btn.classList.remove('copied');
+            btn.textContent = '📋';
+        }, 1500);
+    }).catch(() => {
+        // Fallback for older browsers
+        const ta = document.createElement('textarea');
+        ta.value = path;
+        document.body.appendChild(ta);
+        ta.select();
+        document.execCommand('copy');
+        document.body.removeChild(ta);
+        btn.classList.add('copied');
+        btn.textContent = '✓';
+        setTimeout(() => {
+            btn.classList.remove('copied');
+            btn.textContent = '📋';
+        }, 1500);
+    });
 }
 
 function stopModelInfoPoll(path) {
