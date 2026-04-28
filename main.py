@@ -172,8 +172,9 @@ def _scan_models() -> list[dict]:
                 'mtime': mtime,
                 'size_gb': size_gb,
             })
-    # Sort by modification time, newest first
-    models.sort(key=lambda m: m['mtime'], reverse=True)
+    # Sort by last_run timestamp (if saved), fallback to mtime, newest first
+    all_params = _load_params()
+    models.sort(key=lambda m: all_params.get(m.get('path', ''), {}).get('last_run', m.get('mtime', 0)), reverse=True)
     return models
 
 
@@ -311,6 +312,9 @@ def api_run_model():
         'log_path': str(log_path),
         **{k: data[k] for k in ('ctx_size', 'temp', 'cache_type_k', 'cache_type_v', 'n_gpu_layers') if k in data},
     }
+
+    # Record last_run timestamp for ordering
+    save_model_params(path, {'last_run': int(__import__('time').time() * 1000)})
 
     return jsonify({'ok': True, 'pid': proc.pid, 'port': port})
 

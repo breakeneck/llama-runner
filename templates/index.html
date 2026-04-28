@@ -292,11 +292,11 @@ function renderModels() {
             const inputType = (field === 'cache_type_k' || field === 'cache_type_v') ? 'text' : 'number';
             const stepAttr = field === 'temp' ? 'step="0.1"' : '';
             html += `<div class="form-group" id="fg-${h}-${field}">`;
-            html += `<label class="toggle-label"><input type="checkbox" checked onchange="toggleField('${h}','${field}',this.checked)">${label}</label>`;
+            html += `<label class="toggle-label"><input type="checkbox" checked onchange="toggleField('${h}','${field}',this.checked);autoSaveConfig('${escAttr(model.path)}','${h}')">${label}</label>`;
             if (inputType === 'number') {
-                html += `<input type="${inputType}" id="${field}-${h}" ${stepAttr}>`;
+                html += `<input type="${inputType}" id="${field}-${h}" ${stepAttr} oninput="autoSaveConfig('${escAttr(model.path)}','${h}')">`;
             } else {
-                html += `<input type="${inputType}" id="${field}-${h}">`;
+                html += `<input type="${inputType}" id="${field}-${h}" oninput="autoSaveConfig('${escAttr(model.path)}','${h}')">`;
             }
             html += `</div>`;
         }
@@ -306,7 +306,6 @@ function renderModels() {
         } else {
             html += `<button class="btn btn-success btn-small" onclick="runFromConfig('${escAttr(model.path)}', '${h}')">▶ Run</button>`;
         }
-        html += `<button class="btn btn-primary btn-small" onclick="saveAndShowParams('${escAttr(model.path)}', '${h}')">💾 Save</button>`;
         html += `<span id="msg-${h}" style="color:#73daca;font-size:0.75rem;"></span>`;
         html += `</div></div></td>`;
 
@@ -453,12 +452,19 @@ async function doRun(path, h, payload) {
     }
 }
 
-async function saveAndShowParams(path, h) {
-    const config = collectConfigFields(path, h);
-    await _saveParamsForModel(path, config);
-    const msgEl = document.getElementById('msg-' + h);
-    msgEl.innerHTML = '<span style="color:#9ece6a">✓ Saved</span>';
-    setTimeout(() => { msgEl.innerHTML = ''; }, 2000);
+// Debounced auto-save - saves config changes automatically
+let _autoSaveTimeout = null;
+function autoSaveConfig(path, h) {
+    if (_autoSaveTimeout) clearTimeout(_autoSaveTimeout);
+    _autoSaveTimeout = setTimeout(async () => {
+        const config = collectConfigFields(path, h);
+        await _saveParamsForModel(path, config);
+        const msgEl = document.getElementById('msg-' + h);
+        if (msgEl) {
+            msgEl.innerHTML = '<span style="color:#7aa2f7;font-size:0.7rem;">saved</span>';
+            setTimeout(() => { msgEl.innerHTML = ''; }, 1500);
+        }
+    }, 500);
 }
 
 async function stopModel(path) {
