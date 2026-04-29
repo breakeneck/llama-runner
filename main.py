@@ -51,10 +51,11 @@ _DEFAULT_PARAMS = {
     'cache_type_k': 'q8_0',
     'cache_type_v': 'q8_0',
     'n_gpu_layers': 999,
+    'speculative_decoding': False,
 }
 
 # Which params have enable/disable toggles (port excluded — always on)
-_TOGGLED_PARAMS = {'ctx_size', 'temp', 'cache_type_k', 'cache_type_v', 'n_gpu_layers'}
+_TOGGLED_PARAMS = {'ctx_size', 'temp', 'cache_type_k', 'cache_type_v', 'n_gpu_layers', 'speculative_decoding'}
 
 
 def _load_params() -> dict:
@@ -125,14 +126,16 @@ def get_model_params(path: str) -> dict:
             val = float(val)
         elif key == 'n_gpu_layers':
             val = int(val)
+        elif key == 'speculative_decoding':
+            val = bool(val)
         else:
             val = str(val)
         result[key] = val
         # enable flag defaults to True unless explicitly saved otherwise
-        # cache_type_k and cache_type_v default to False (disabled)
+        # cache_type_k, cache_type_v, and speculative_decoding default to False (disabled)
         if key in _TOGGLED_PARAMS:
-            cache_keys = {'cache_type_k', 'cache_type_v'}
-            default_enabled = False if key in cache_keys else True
+            disabled_by_default = {'cache_type_k', 'cache_type_v', 'speculative_decoding'}
+            default_enabled = False if key in disabled_by_default else True
             result[f'{key}_enabled'] = bool(saved.get(f'{key}_enabled', default_enabled))
     return result
 
@@ -282,6 +285,7 @@ def api_status():
             'cache_type_k': v.get('cache_type_k', 'q8_0'),
             'cache_type_v': v.get('cache_type_v', 'q8_0'),
             'n_gpu_layers': v.get('n_gpu_layers', 999),
+            'speculative_decoding': v.get('speculative_decoding', False),
         })
     return jsonify({'running': info})
 
@@ -332,6 +336,9 @@ def api_run_model():
     if data.get('n_gpu_layers_enabled'):
         cmd.extend(['--n-gpu-layers', str(int(data.get('n_gpu_layers', 999)))])
 
+    if data.get('speculative_decoding_enabled'):
+        cmd.extend(['--spec-type', 'ngram-mod', '--spec-ngram-size-n', '24', '--draft-min', '12', '--draft-max', '48'])
+
     # Use a persistent log file named after the model (overwritten each run)
     log_path = _log_path_for_model(path)
     log_file = open(log_path, 'w')
@@ -352,7 +359,7 @@ def api_run_model():
         'proc': proc,
         'port': port,
         'log_path': str(log_path),
-        **{k: data[k] for k in ('ctx_size', 'temp', 'cache_type_k', 'cache_type_v', 'n_gpu_layers') if k in data},
+        **{k: data[k] for k in ('ctx_size', 'temp', 'cache_type_k', 'cache_type_v', 'n_gpu_layers', 'speculative_decoding') if k in data},
     }
 
     # Record in run history (process started, but not yet confirmed running)

@@ -409,16 +409,20 @@ function renderModels() {
 
         // Config panel inline
         html += `<div id="config-${h}" class="config-panel">`;
-        for (const field of ['ctx_size', 'temp', 'cache_type_k', 'cache_type_v', 'n_gpu_layers']) {
-            const label = { ctx_size: 'Context (k)', temp: 'Temp', cache_type_k: 'Cache K', cache_type_v: 'Cache V', n_gpu_layers: 'GPU Layers' }[field];
+        for (const field of ['ctx_size', 'temp', 'cache_type_k', 'cache_type_v', 'n_gpu_layers', 'speculative_decoding']) {
+            const label = { ctx_size: 'Context (k)', temp: 'Temp', cache_type_k: 'Cache K', cache_type_v: 'Cache V', n_gpu_layers: 'GPU Layers', speculative_decoding: 'Spec. Decoding' }[field];
+            const isCheckboxOnly = field === 'speculative_decoding';
             const inputType = (field === 'cache_type_k' || field === 'cache_type_v') ? 'text' : 'number';
             const stepAttr = field === 'temp' ? 'step="0.1"' : '';
+            const cbChecked = isCheckboxOnly ? '' : 'checked';
             html += `<div class="form-group" id="fg-${h}-${field}">`;
-            html += `<label class="toggle-label"><input type="checkbox" checked onchange="toggleField('${h}','${field}',this.checked);autoSaveConfig('${escAttr(model.path)}','${h}')">${label}</label>`;
-            if (inputType === 'number') {
-                html += `<input type="${inputType}" id="${field}-${h}" ${stepAttr} oninput="autoSaveConfig('${escAttr(model.path)}','${h}')">`;
-            } else {
-                html += `<input type="${inputType}" id="${field}-${h}" oninput="autoSaveConfig('${escAttr(model.path)}','${h}')">`;
+            html += `<label class="toggle-label"><input type="checkbox" ${cbChecked} onchange="toggleField('${h}','${field}',this.checked);autoSaveConfig('${escAttr(model.path)}','${h}')">${label}</label>`;
+            if (!isCheckboxOnly) {
+                if (inputType === 'number') {
+                    html += `<input type="${inputType}" id="${field}-${h}" ${stepAttr} oninput="autoSaveConfig('${escAttr(model.path)}','${h}')">`;
+                } else {
+                    html += `<input type="${inputType}" id="${field}-${h}" oninput="autoSaveConfig('${escAttr(model.path)}','${h}')">`;
+                }
             }
             html += `</div>`;
         }
@@ -524,15 +528,18 @@ async function toggleConfig(path) {
     if (panel.classList.toggle('visible')) {
         // Load params and populate
         const params = await _loadParamsForModel(path);
-        const defaults = { ctx_size: 100, temp: 0.2, cache_type_k: 'q8_0', cache_type_v: 'q8_0', n_gpu_layers: 999 };
-        for (const field of ['ctx_size', 'temp', 'cache_type_k', 'cache_type_v', 'n_gpu_layers']) {
+        const defaults = { ctx_size: 100, temp: 0.2, cache_type_k: 'q8_0', cache_type_v: 'q8_0', n_gpu_layers: 999, speculative_decoding: false };
+        for (const field of ['ctx_size', 'temp', 'cache_type_k', 'cache_type_v', 'n_gpu_layers', 'speculative_decoding']) {
             const input = document.getElementById(`${field}-${h}`);
             const fg = document.getElementById(`fg-${h}-${field}`);
-            if (!input) continue;
-            const val = params ? params[field] : defaults[field];
-            input.value = val;
-            // Toggle checkbox
-            const enabled = params ? (params[`${field}_enabled`] !== false) : true;
+            if (!fg) continue;
+            if (input) {
+                const val = params ? params[field] : defaults[field];
+                input.value = val;
+            }
+            // Toggle checkbox — speculative_decoding and cache types default to disabled
+            const disabledByDefault = ['cache_type_k', 'cache_type_v', 'speculative_decoding'];
+            const enabled = params ? (params[`${field}_enabled`] !== false) : !disabledByDefault.includes(field);
             const cb = fg.querySelector('input[type="checkbox"]');
             if (cb) { cb.checked = enabled; toggleField(h, field, enabled); }
         }
@@ -540,14 +547,16 @@ async function toggleConfig(path) {
 }
 
 function collectConfigFields(path, h) {
-    const fields = ['ctx_size', 'temp', 'cache_type_k', 'cache_type_v', 'n_gpu_layers'];
+    const fields = ['ctx_size', 'temp', 'cache_type_k', 'cache_type_v', 'n_gpu_layers', 'speculative_decoding'];
     const result = {};
     for (const field of fields) {
         const fg = document.getElementById(`fg-${h}-${field}`);
         const cb = fg ? fg.querySelector('input[type="checkbox"]') : null;
         const input = document.getElementById(`${field}-${h}`);
         result[`${field}_enabled`] = cb ? cb.checked : true;
-        if (input) {
+        if (field === 'speculative_decoding') {
+            result[field] = cb ? cb.checked : false;
+        } else if (input) {
             result[field] = (field === 'temp') ? parseFloat(input.value) : (field === 'n_gpu_layers' || field === 'ctx_size') ? parseInt(input.value) : input.value;
         }
     }
@@ -567,7 +576,7 @@ async function runWithSaved(path, h) {
     if (!params) { toggleConfig(path); return; }  // open config to show defaults
 
     const payload = { path };
-    for (const field of ['ctx_size', 'temp', 'cache_type_k', 'cache_type_v', 'n_gpu_layers']) {
+    for (const field of ['ctx_size', 'temp', 'cache_type_k', 'cache_type_v', 'n_gpu_layers', 'speculative_decoding']) {
         payload[`${field}_enabled`] = params[`${field}_enabled`] !== false;
         payload[field] = params[field];
     }
@@ -649,7 +658,7 @@ async function restartModel(path, h) {
     if (!params) return;
 
     const payload = { path };
-    for (const field of ['ctx_size', 'temp', 'cache_type_k', 'cache_type_v', 'n_gpu_layers']) {
+    for (const field of ['ctx_size', 'temp', 'cache_type_k', 'cache_type_v', 'n_gpu_layers', 'speculative_decoding']) {
         payload[`${field}_enabled`] = params[`${field}_enabled`] !== false;
         payload[field] = params[field];
     }
@@ -797,7 +806,7 @@ async function stopAndStopStart(stoppedPath, startPath) {
     if (!params) return;
 
     const payload = { path: startPath };
-    for (const field of ['ctx_size', 'temp', 'cache_type_k', 'cache_type_v', 'n_gpu_layers']) {
+    for (const field of ['ctx_size', 'temp', 'cache_type_k', 'cache_type_v', 'n_gpu_layers', 'speculative_decoding']) {
         payload[`${field}_enabled`] = params[`${field}_enabled`] !== false;
         payload[field] = params[field];
     }
