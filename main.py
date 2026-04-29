@@ -6,17 +6,21 @@ import os
 import re
 import signal
 import subprocess
+import time
 from pathlib import Path
 
-# ── Log directory: persistent per-model logs ─────────────────────────────
+# ── Directories ─────────────────────────────────────────────────────────
 LOG_DIR = Path(__file__).parent / 'logs'
 LOG_DIR.mkdir(exist_ok=True)
+OLLAMA_DIR = Path(__file__).parent / 'ollama'
+OLLAMA_DIR.mkdir(exist_ok=True)
 
 
 def _log_path_for_model(model_path: str) -> Path:
     """Return a persistent log path like logs/<modelname>.log for a model."""
     stem = Path(model_path).stem  # e.g., 'Qwen2.5-7B-Instruct-Q4_K_M'
     return LOG_DIR / f'{stem}.log'
+
 
 from dotenv import load_dotenv
 from flask import Flask, jsonify, render_template, request
@@ -41,22 +45,57 @@ running_processes: dict[str, dict] = {}
 
 app = Flask(__name__)
 
-# ── Per-model parameter persistence ─────────────────────────────────────
+# ── Persistence files ──────────────────────────────────────────────────
 _PARAMS_FILE = Path(__file__).parent / 'model_params.json'
 _RUN_HISTORY_FILE = Path(__file__).parent / 'run_history.json'
+_TEMPLATES_FILE = Path(__file__).parent / 'settings_templates.json'
 
 _DEFAULT_PARAMS = {
     'ctx_size': 100,          # shorthand: 100 means 100k
     'temp': 0.2,
+    'top_p': 0.95,
+    'top_k': 20,
+    'min_p': 0.0,
+    'presence_penalty': 0.0,
+    'repeat_penalty': 1.0,
+    'num_predict': 1024,
     'cache_type_k': 'q8_0',
     'cache_type_v': 'q8_0',
     'n_gpu_layers': 999,
     'speculative_decoding': False,
 }
 
-# Which params have enable/disable toggles (port excluded — always on)
-_TOGGLED_PARAMS = {'ctx_size', 'temp', 'cache_type_k', 'cache_type_v', 'n_gpu_layers', 'speculative_decoding'}
+# Which params have enable/disable toggles
+_TOGGLED_PARAMS = {
+    'ctx_size', 'temp', 'top_p', 'top_k', 'min_p',
+    'presence_penalty', 'repeat_penalty', 'num_predict',
+    'cache_type_k', 'cache_type_v', 'n_gpu_layers', 'speculative_decoding'
+}
 
+# Params affected by templates (inference settings)
+_INFERENCE_PARAMS = {'temp', 'top_p', 'top_k', 'min_p', 'presence_penalty', 'repeat_penalty', 'num_predict'}
+
+# Default settings templates
+_DEFAULT_TEMPLATES = {
+    'Thinking (General)': {
+        'temp': 1.0, 'top_p': 0.95, 'top_k': 20, 'min_p': 0.0,
+        'presence_penalty': 0.0, 'repeat_penalty': 1.0, 'num_predict': 1024,
+    },
+    'Thinking (Coding)': {
+        'temp': 0.6, 'top_p': 0.95, 'top_k': 20, 'min_p': 0.0,
+        'presence_penalty': 0.0, 'repeat_penalty': 1.0, 'num_predict': 1024,
+    },
+    'Instruct': {
+        'temp': 0.7, 'top_p': 0.80, 'top_k': 20, 'min_p': 0.0,
+        'presence_penalty': 1.5, 'repeat_penalty': 1.0, 'num_predict': 1024,
+    },
+}
+
+# KV-cache quantization options
+_KV_QUANT_OPTIONS = ['q8_0', 'q4_0', 'q4_1', 'turbo']
+
+
+# ── Load/Save helpers ──────────────────────────────────────────────────
 
 def _load_params() -> dict:
     """Load saved per-model parameters from disk."""
@@ -88,12 +127,28 @@ def _save_run_history(history: dict):
     _RUN_HISTORY_FILE.write_text(json.dumps(history, indent=2))
 
 
+def _load_templates() -> dict:
+    """Load settings templates, merging with defaults."""
+    saved = {}
+    if _TEMPLATES_FILE.exists():
+        try:
+            saved = json.loads(_TEMPLATES_FILE.read_text())
+        except (json.JSONDecodeError, OSError):
+            pass
+    # Merge: defaults first, then saved overrides
+    return {**_DEFAULT_TEMPLATES, **saved}
+
+
+def _save_templates(templates: dict):
+    """Persist settings templates to disk."""
+    _TEMPLATES_FILE.write_text(json.dumps(templates, indent=2))
+
+
 def update_run_history(path: str, status: str, error: str = None):
     """Record a run attempt in history. Only count as 'running' if actually successful."""
-    import time
     history = _load_run_history()
     entry = {
-        'status': status,          # 'running', 'error', 'stopped'
+        'status': status,          # 'running', 'error', 'stopped', 'starting'
         'timestamp': int(time.time() * 1000),
     }
     if error:
@@ -122,21 +177,25 @@ def get_model_params(path: str) -> dict:
         val = saved.get(key, default)
         if key == 'ctx_size':
             val = int(val)
-        elif key == 'temp':
+        elif key in ('temp', 'top_p', 'min_p', 'presence_penalty', 'repeat_penalty'):
             val = float(val)
-        elif key == 'n_gpu_layers':
+        elif key in ('top_k', 'n_gpu_layers', 'num_predict'):
             val = int(val)
         elif key == 'speculative_decoding':
             val = bool(val)
         else:
             val = str(val)
         result[key] = val
-        # enable flag defaults to True unless explicitly saved otherwise
-        # cache_type_k, cache_type_v, and speculative_decoding default to False (disabled)
+        # enable flag defaults
         if key in _TOGGLED_PARAMS:
             disabled_by_default = {'cache_type_k', 'cache_type_v', 'speculative_decoding'}
             default_enabled = False if key in disabled_by_default else True
             result[f'{key}_enabled'] = bool(saved.get(f'{key}_enabled', default_enabled))
+    # Also include last_run and template name if saved
+    if 'last_run' in saved:
+        result['last_run'] = saved['last_run']
+    if 'template' in saved:
+        result['template'] = saved['template']
     return result
 
 
@@ -181,6 +240,8 @@ def _scan_models() -> list[dict]:
             split_groups.setdefault(d, []).append(gguf)
             seen_split_dirs.add((d, m.group(2)))  # dir + total parts
 
+    all_params = _load_params()
+
     for gguf in all_ggufs:
         m = _SPLIT_RE.search(gguf.name)
         mtime = int(gguf.stat().st_mtime * 1000)  # ms for JS Date
@@ -199,6 +260,7 @@ def _scan_models() -> list[dict]:
                 'mtime': mtime,
                 'size_gb': size_gb,
                 'split_parts': len(split_groups[d]),
+                'last_run': all_params.get(str(gguf), {}).get('last_run', 0),
             })
         else:
             rel = gguf.relative_to(base)
@@ -215,10 +277,10 @@ def _scan_models() -> list[dict]:
                 'path': str(gguf),
                 'mtime': mtime,
                 'size_gb': size_gb,
+                'last_run': all_params.get(str(gguf), {}).get('last_run', 0),
             })
     # Sort by last_run timestamp (if saved), fallback to mtime, newest first
-    all_params = _load_params()
-    models.sort(key=lambda m: all_params.get(m.get('path', ''), {}).get('last_run', m.get('mtime', 0)), reverse=True)
+    models.sort(key=lambda m: m.get('last_run', 0) or m.get('mtime', 0), reverse=True)
     return models
 
 
@@ -251,10 +313,46 @@ def _stop_all_models():
 
 def _signal_handler(signum, frame):
     """Handle SIGINT/SIGTERM: stop all models and exit."""
-    print("\\n🛑 Shutting down Llama Runner...")
+    print("\n🛑 Shutting down Llama Runner...")
     _stop_all_models()
     print("✓ All models stopped. Goodbye!")
     os._exit(0)
+
+
+# ── Ollama helpers ─────────────────────────────────────────────────────
+
+def _generate_modelfile(model_path: str, params: dict) -> str:
+    """Generate an Ollama Modelfile from model params."""
+    lines = [f'FROM {model_path}', '']
+
+    if params.get('ctx_size_enabled', True):
+        ctx_val = int(params.get('ctx_size', 100)) * 1000
+        lines.append(f'PARAMETER num_ctx {ctx_val}')
+    if params.get('temp_enabled', True):
+        lines.append(f'PARAMETER temperature {params.get("temp", 0.2)}')
+    if params.get('top_p_enabled', True):
+        lines.append(f'PARAMETER top_p {params.get("top_p", 0.95)}')
+    if params.get('top_k_enabled', True):
+        lines.append(f'PARAMETER top_k {int(params.get("top_k", 20))}')
+    if params.get('min_p_enabled', True):
+        lines.append(f'PARAMETER min_p {params.get("min_p", 0.0)}')
+    if params.get('repeat_penalty_enabled', True):
+        lines.append(f'PARAMETER repeat_penalty {params.get("repeat_penalty", 1.0)}')
+    if params.get('presence_penalty_enabled', True):
+        lines.append(f'PARAMETER presence_penalty {params.get("presence_penalty", 0.0)}')
+    if params.get('num_predict_enabled', True):
+        lines.append(f'PARAMETER num_predict {int(params.get("num_predict", 1024))}')
+
+    return '\n'.join(lines)
+
+
+def _save_ollama_modelfile(model_path: str, params: dict) -> str:
+    """Save an Ollama Modelfile to the ollama/ directory."""
+    stem = Path(model_path).stem
+    modelfile_path = OLLAMA_DIR / f'{stem}.modelfile'
+    content = _generate_modelfile(model_path, params)
+    modelfile_path.write_text(content)
+    return str(modelfile_path)
 
 
 # ── Routes ──────────────────────────────────────────────────────────────
@@ -274,14 +372,25 @@ def api_models():
 def api_status():
     """Return currently running model information."""
     _clean_dead()
+    history = _load_run_history()
     info = []
     for path, v in running_processes.items():
+        # Don't report as running if model has error status in history
+        hist_state = history.get(path, {})
+        if hist_state.get('status') == 'error':
+            continue
         info.append({
             'path': path,
             'pid': v['pid'],
             'port': v['port'],
-            'ctx_size': v.get('ctx_size', 200),          # shorthand: 200 = 200k
+            'ctx_size': v.get('ctx_size', 100),
             'temp': v.get('temp', 0.2),
+            'top_p': v.get('top_p', 0.95),
+            'top_k': v.get('top_k', 20),
+            'min_p': v.get('min_p', 0.0),
+            'presence_penalty': v.get('presence_penalty', 0.0),
+            'repeat_penalty': v.get('repeat_penalty', 1.0),
+            'num_predict': v.get('num_predict', 1024),
             'cache_type_k': v.get('cache_type_k', 'q8_0'),
             'cache_type_v': v.get('cache_type_v', 'q8_0'),
             'n_gpu_layers': v.get('n_gpu_layers', 999),
@@ -325,6 +434,24 @@ def api_run_model():
     if data.get('temp_enabled'):
         cmd.extend(['--temp', str(float(data.get('temp', 0.2)))])
 
+    if data.get('top_p_enabled'):
+        cmd.extend(['--top-p', str(float(data.get('top_p', 0.95)))])
+
+    if data.get('top_k_enabled'):
+        cmd.extend(['--top-k', str(int(data.get('top_k', 20)))])
+
+    if data.get('min_p_enabled'):
+        cmd.extend(['--min-p', str(float(data.get('min_p', 0.0)))])
+
+    if data.get('presence_penalty_enabled'):
+        cmd.extend(['--presence-penalty', str(float(data.get('presence_penalty', 0.0)))])
+
+    if data.get('repeat_penalty_enabled'):
+        cmd.extend(['--repeat-penalty', str(float(data.get('repeat_penalty', 1.0)))])
+
+    if data.get('num_predict_enabled'):
+        cmd.extend(['--n-predict', str(int(data.get('num_predict', 1024)))])
+
     if data.get('cache_type_k_enabled'):
         cache_k = (data.get('cache_type_k') or 'q8_0')
         cmd.extend(['--cache-type-k', cache_k])
@@ -359,10 +486,14 @@ def api_run_model():
         'proc': proc,
         'port': port,
         'log_path': str(log_path),
-        **{k: data[k] for k in ('ctx_size', 'temp', 'cache_type_k', 'cache_type_v', 'n_gpu_layers', 'speculative_decoding') if k in data},
+        **{k: data[k] for k in (
+            'ctx_size', 'temp', 'top_p', 'top_k', 'min_p',
+            'presence_penalty', 'repeat_penalty', 'num_predict',
+            'cache_type_k', 'cache_type_v', 'n_gpu_layers', 'speculative_decoding'
+        ) if k in data},
     }
 
-    # Record in run history (process started, but not yet confirmed running)
+    # Clear any previous error state and record as starting
     update_run_history(path, 'starting')
 
     return jsonify({'ok': True, 'pid': proc.pid, 'port': port})
@@ -380,12 +511,24 @@ def api_run_success():
 
 @app.route('/api/models/run-error', methods=['POST'])
 def api_run_error():
-    """Called by frontend when model fails to start (error detected in logs)."""
+    """Called by frontend when model fails to start (error detected in logs).
+    Also kills the process and removes it from running_processes."""
     data = request.get_json(force=True)
     path = data.get('path', '')
     error = data.get('error', 'Unknown error')
     if path:
         update_run_history(path, 'error', error)
+        # Kill the process if it's still in running_processes
+        entry = running_processes.pop(path, None)
+        if entry:
+            proc = entry['proc']
+            try:
+                os.killpg(os.getpgid(proc.pid), 9)
+            except Exception:
+                try:
+                    proc.kill()
+                except Exception:
+                    pass
     return jsonify({'ok': True})
 
 
@@ -527,8 +670,8 @@ def api_get_preferences():
     all_params = _load_params()
     prefs = all_params.get('_preferences', {})
     return jsonify({
-        'sortField': prefs.get('sortField', 'name'),
-        'sortDir': prefs.get('sortDir', 1),
+        'sortField': prefs.get('sortField', 'status'),
+        'sortDir': prefs.get('sortDir', -1),
     })
 
 
@@ -538,8 +681,8 @@ def api_save_preferences():
     data = request.get_json(force=True)
     all_params = _load_params()
     all_params['_preferences'] = {
-        'sortField': data.get('sortField', 'name'),
-        'sortDir': data.get('sortDir', 1),
+        'sortField': data.get('sortField', 'status'),
+        'sortDir': data.get('sortDir', -1),
     }
     _save_params(all_params)
     return jsonify({'ok': True})
@@ -553,11 +696,26 @@ def api_run_states():
     _clean_dead()
     changed = False
     for path in list(history.keys()):
-        if path not in running_processes and history[path]['status'] == 'running':
-            # Process died without proper stop - mark as stopped
-            history[path]['status'] = 'stopped'
-            history[path]['timestamp'] = int(__import__('time').time() * 1000)
-            changed = True
+        state = history[path]
+        if path not in running_processes:
+            if state['status'] in ('running', 'starting'):
+                # Process died without proper stop - mark as stopped
+                history[path]['status'] = 'stopped'
+                history[path]['timestamp'] = int(time.time() * 1000)
+                changed = True
+        else:
+            # Process is in running_processes but has error status - kill it
+            if state.get('status') == 'error':
+                entry = running_processes.pop(path, None)
+                if entry:
+                    proc = entry['proc']
+                    try:
+                        os.killpg(os.getpgid(proc.pid), 9)
+                    except Exception:
+                        try:
+                            proc.kill()
+                        except Exception:
+                            pass
     if changed:
         _save_run_history(history)
     return jsonify(history)
@@ -612,7 +770,120 @@ def api_vram():
     return jsonify({'gpus': gpus})
 
 
-# ── Entrypoint ──────────────────────────────────────────────────────────
+# ── Templates API ──────────────────────────────────────────────────────
+
+@app.route('/api/templates')
+def api_get_templates():
+    """Get all settings templates."""
+    return jsonify(_load_templates())
+
+
+@app.route('/api/templates', methods=['POST'])
+def api_save_templates():
+    """Save settings templates."""
+    data = request.get_json(force=True)
+    _save_templates(data)
+    return jsonify({'ok': True})
+
+
+@app.route('/api/templates/apply', methods=['POST'])
+def api_apply_template():
+    """Apply a template to a model's params."""
+    data = request.get_json(force=True)
+    path = data.get('path', '')
+    template_name = data.get('template', '')
+    templates = _load_templates()
+    template = templates.get(template_name)
+    if not template:
+        return jsonify({'ok': False, 'error': 'Template not found'}), 404
+    # Apply template params to model (only inference params)
+    save_model_params(path, {**template, 'template': template_name})
+    return jsonify({'ok': True, 'params': get_model_params(path)})
+
+
+# ── Ollama API ─────────────────────────────────────────────────────────
+
+@app.route('/api/ollama/modelfile', methods=['POST'])
+def api_ollama_modelfile():
+    """Generate and save an Ollama Modelfile for a model."""
+    data = request.get_json(force=True)
+    path = data.get('path', '')
+    params = data.get('params', {})
+    if not path:
+        return jsonify({'ok': False, 'error': 'No model path provided'}), 400
+    # Use saved params if no params provided
+    if not params:
+        params = get_model_params(path)
+    modelfile_path = _save_ollama_modelfile(path, params)
+    content = _generate_modelfile(path, params)
+    return jsonify({'ok': True, 'modelfile_path': modelfile_path, 'content': content})
+
+
+@app.route('/api/ollama/modelfile/<path:path>', methods=['GET'])
+def api_ollama_get_modelfile(path):
+    """Get the saved Ollama Modelfile for a model."""
+    stem = Path(path).stem
+    modelfile_path = OLLAMA_DIR / f'{stem}.modelfile'
+    if not modelfile_path.is_file():
+        # Generate on the fly from saved params
+        params = get_model_params(path)
+        content = _generate_modelfile(path, params)
+        return jsonify({'ok': True, 'content': content, 'saved': False})
+    content = modelfile_path.read_text()
+    return jsonify({'ok': True, 'content': content, 'saved': True})
+
+
+@app.route('/api/ollama/run', methods=['POST'])
+def api_ollama_run():
+    """Create a model in ollama from modelfile (ollama serve must be running separately)."""
+    data = request.get_json(force=True)
+    path = data.get('path', '')
+    if not path:
+        return jsonify({'ok': False, 'error': 'No model path provided'}), 400
+    params = data.get('params', {})
+    if not params:
+        params = get_model_params(path)
+    # Save modelfile
+    modelfile_path = _save_ollama_modelfile(path, params)
+    # Create ollama model name from file stem
+    stem = Path(path).stem
+    ollama_name = f'llama-runner:{stem.lower()}'
+    # Run ollama create
+    try:
+        result = subprocess.run(
+            ['ollama', 'create', ollama_name, '-f', modelfile_path],
+            capture_output=True, text=True, timeout=120
+        )
+        if result.returncode != 0:
+            return jsonify({'ok': False, 'error': f'ollama create failed: {result.stderr}'}), 500
+    except FileNotFoundError:
+        return jsonify({'ok': False, 'error': 'ollama not found. Install ollama first.'}), 500
+    except subprocess.TimeoutExpired:
+        return jsonify({'ok': False, 'error': 'ollama create timed out'}), 500
+    return jsonify({'ok': True, 'ollama_name': ollama_name, 'modelfile_path': modelfile_path})
+
+
+@app.route('/api/ollama/list')
+def api_ollama_list():
+    """List models available in ollama."""
+    try:
+        result = subprocess.run(
+            ['ollama', 'list'],
+            capture_output=True, text=True, timeout=10
+        )
+        models = []
+        for line in result.stdout.strip().split('\n')[1:]:  # skip header
+            if not line.strip():
+                continue
+            parts = line.split()
+            if parts:
+                models.append({'name': parts[0]})
+        return jsonify({'models': models})
+    except Exception as e:
+        return jsonify({'models': [], 'error': str(e)})
+
+
+# ── Entrypoint ─────────────────────────────────────────────────────────
 
 if __name__ == '__main__':
     # Register signal handlers for graceful shutdown (Ctrl+C / kill)

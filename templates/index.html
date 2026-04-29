@@ -17,9 +17,30 @@
             padding: 12px 16px; margin-bottom: 10px;
             display: flex; align-items: center; justify-content: space-between; gap: 16px;
         }
+        .header-left { display: flex; align-items: center; gap: 12px; }
+        .header-right { display: flex; align-items: center; gap: 12px; }
         .gpu-stats { display: flex; gap: 16px; font-size: 0.85rem; flex-wrap: wrap; }
         .gpu-stat { color: #a9b1d6; }
         .gpu-stat span { color: #7aa2f7; font-weight: bold; }
+
+        /* Tabs */
+        .tab-container { display: flex; gap: 0; }
+        .tab-btn {
+            padding: 8px 16px; border: 1px solid #414868; background: #1a1b26; color: #565f89;
+            cursor: pointer; font-size: 0.85rem; font-weight: bold; transition: all 0.2s;
+            white-space: nowrap;
+        }
+        .tab-btn:first-child { border-radius: 6px 0 0 6px; }
+        .tab-btn:last-child { border-radius: 0 6px 6px 0; }
+        .tab-btn.active { background: #7aa2f7; color: #1a1b26; border-color: #7aa2f7; }
+        .tab-btn:hover:not(.active) { background: #292e42; color: #a9b1d6; }
+
+        /* Settings icon button */
+        .btn-icon {
+            background: none; border: 1px solid #414868; color: #7aa2f7; padding: 6px 10px;
+            border-radius: 6px; cursor: pointer; font-size: 1.1rem; transition: all 0.2s;
+        }
+        .btn-icon:hover { background: #292e42; border-color: #7aa2f7; }
 
         /* Controls */
         .controls { display: flex; gap: 8px; margin-bottom: 10px; align-items: center; }
@@ -47,6 +68,8 @@
         .btn-copy { background: #414868; color: #a9b1d6; padding: 3px 6px; font-size: 0.7rem; border-radius: 4px; }
         .btn-copy:hover { background: #7aa2f7; color: #1a1b26; }
         .btn-copy.copied { background: #9ece6a; color: #1a1b26; }
+        .btn-ollama { background: #bb9af7; color: #1a1b26; }
+        .btn-ollama:hover { background: #a07de6; }
 
         /* Model Table */
         .model-table { width: 100%; border-collapse: collapse; font-size: 0.85rem; }
@@ -54,6 +77,9 @@
         .model-table th:first-child { border-radius: 8px 0 0 0; }
         .model-table th:last-child { border-radius: 0 8px 0 0; }
         .model-table th:hover { background: #292e42; }
+        .model-table th .sort-arrow { font-size: 0.65rem; margin-left: 2px; }
+        .model-table th.sorted-asc .sort-arrow::after { content: '▲'; }
+        .model-table th.sorted-desc .sort-arrow::after { content: '▼'; }
         .model-table td { padding: 6px 10px; border-bottom: 1px solid #2f354b; vertical-align: middle; }
         .model-row { background: #1a1b26; transition: background 0.2s; }
         .model-row:hover { background: #24283b; }
@@ -68,16 +94,37 @@
             display: none; border: 1px solid #414868; font-size: 0.8rem;
         }
         .config-panel.visible { display: block; }
-        .config-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(180px, 1fr)); gap: 8px; margin-bottom: 8px; }
+        .config-columns { display: flex; gap: 16px; margin-bottom: 8px; }
+        .config-column { flex: 1; min-width: 0; }
+        .config-column-title {
+            color: #7aa2f7; font-size: 0.75rem; font-weight: bold; text-transform: uppercase;
+            letter-spacing: 0.5px; margin-bottom: 6px; padding-bottom: 4px;
+            border-bottom: 1px solid #414868;
+        }
+        .config-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; }
+        .config-grid-single { display: grid; grid-template-columns: 1fr; gap: 6px; }
         .form-group label { display: flex; align-items: center; gap: 4px; font-size: 0.75rem; color: #7aa2f7; margin-bottom: 2px; }
         .form-group input[type="number"], .form-group input[type="text"] {
             width: 100%; background: #1a1b26; border: 1px solid #414868; color: #c0caf5;
             padding: 4px 8px; border-radius: 4px; font-size: 0.8rem; outline: none;
         }
         .form-group input:focus { border-color: #7aa2f7; }
+        .form-group select {
+            width: 100%; background: #1a1b26; border: 1px solid #414868; color: #c0caf5;
+            padding: 4px 8px; border-radius: 4px; font-size: 0.8rem; outline: none;
+        }
+        .form-group select:focus { border-color: #7aa2f7; }
         .toggle-label { display: flex; align-items: center; gap: 3px; cursor: pointer; color: #a9b1d6; font-size: 0.75rem; }
         .toggle-label input[type="checkbox"] { accent-color: #7aa2f7; width: 14px; height: 14px; }
-        .form-group.disabled input:not([type="checkbox"]) { opacity: 0.3; }
+        .form-group.disabled input:not([type="checkbox"]),
+        .form-group.disabled select { opacity: 0.3; }
+        .template-select-group { margin-bottom: 8px; }
+        .template-select-group label { display: block; font-size: 0.75rem; color: #bb9af7; margin-bottom: 2px; font-weight: bold; }
+        .template-select-group select {
+            width: 100%; background: #1a1b26; border: 1px solid #bb9af7; color: #c0caf5;
+            padding: 5px 8px; border-radius: 4px; font-size: 0.8rem; outline: none;
+        }
+        .config-bottom-row { display: flex; gap: 8px; align-items: center; margin-top: 6px; padding-top: 6px; border-top: 1px solid #414868; }
 
         /* Status */
         .status { display: inline-block; padding: 2px 8px; border-radius: 10px; font-size: 0.7rem; font-weight: bold; white-space: nowrap; cursor: pointer; }
@@ -133,14 +180,41 @@
         #log-header { padding:10px 16px; background:#24283b; border-bottom:1px solid #414868; border-radius:8px 8px 0 0; display:flex; justify-content:space-between; align-items:center; color:#7aa2f7; font-weight:bold; }
         #log-body { flex:1; overflow:auto; padding:10px; font-family:'Courier New',monospace; font-size:0.75rem; line-height:1.4; color:#a9b1d6; white-space:pre-wrap; word-break:break-all; }
         #log-refresh { background:none;border:1px solid #414868;color:#7aa2f7;padding:3px 10px;border-radius:4px;cursor:pointer;font-size:0.75rem;margin-right:6px; }
+
+        /* Templates Modal */
+        .template-item { display: flex; justify-content: space-between; align-items: center; padding: 8px 0; border-bottom: 1px solid #2f354b; }
+        .template-item:last-child { border-bottom: none; }
+        .template-name { color: #bb9af7; font-weight: bold; font-size: 0.85rem; }
+        .template-params { color: #565f89; font-size: 0.7rem; margin-top: 2px; }
+        .template-actions { display: flex; gap: 4px; }
+        .template-edit-form { background: #1a1b26; padding: 10px; border-radius: 6px; margin-top: 8px; border: 1px solid #414868; }
+        .template-edit-form .form-row { display: flex; gap: 8px; margin-bottom: 6px; align-items: center; }
+        .template-edit-form .form-row label { min-width: 100px; font-size: 0.75rem; color: #7aa2f7; }
+        .template-edit-form .form-row input { flex: 1; background: #24283b; border: 1px solid #414868; color: #c0caf5; padding: 4px 8px; border-radius: 4px; font-size: 0.8rem; }
+
+        /* Modelfile Modal */
+        #modelfile-content {
+            background: #1a1b26; border: 1px solid #414868; border-radius: 6px;
+            padding: 12px; font-family: 'Courier New', monospace; font-size: 0.8rem;
+            color: #9ece6a; white-space: pre-wrap; word-break: break-all;
+            max-height: 400px; overflow: auto;
+        }
     </style>
 </head>
 <body>
 <div class="container">
-    <!-- Title + VRAM in one row -->
+    <!-- Title + Tabs + VRAM in one row -->
     <div class="header-panel">
-        <h1>🦙 Llama Runner</h1>
-        <div id="vram-content" class="gpu-stats" onclick="refreshVRAM()" title="Click to refresh">Loading...</div>
+        <div class="header-left">
+            <div class="tab-container">
+                <button class="tab-btn active" data-tab="llama" onclick="switchTab('llama')">🦙 Llama Runner</button>
+                <button class="tab-btn" data-tab="ollama" onclick="switchTab('ollama')">🦙 Ollama Runner</button>
+            </div>
+        </div>
+        <div class="header-right">
+            <button class="btn-icon" onclick="showTemplatesModal()" title="Settings Templates">⚙</button>
+            <div id="vram-content" class="gpu-stats" onclick="refreshVRAM()" title="Click to refresh">Loading...</div>
+        </div>
     </div>
 
     <!-- Notification Banner -->
@@ -159,12 +233,12 @@
     <table class="model-table">
         <thead>
             <tr>
-                <th style="width:35%" onclick="setSort('name')">Name ↕</th>
-                <th style="width:8%" onclick="setSort('size')" class="sort-size">Size ↕</th>
-                <th style="width:8%" onclick="setSort('date')">Date ↕</th>
-                <th style="width:10%">Context</th>
-                <th style="width:10%">Status</th>
-                <th style="width:29%">Actions</th>
+                <th style="width:30%" data-sort="name" onclick="setSort('name')">Name <span class="sort-arrow"></span></th>
+                <th style="width:7%" data-sort="size" onclick="setSort('size')">Size <span class="sort-arrow"></span></th>
+                <th style="width:7%" data-sort="date" onclick="setSort('date')">Date <span class="sort-arrow"></span></th>
+                <th style="width:8%">Context</th>
+                <th style="width:9%" data-sort="status" onclick="setSort('status')">Status <span class="sort-arrow"></span></th>
+                <th style="width:39%">Actions</th>
             </tr>
         </thead>
         <tbody id="model-list"></tbody>
@@ -202,26 +276,67 @@
     </div>
 </div>
 
+<!-- Templates Modal -->
+<div id="templates-modal" class="modal-overlay">
+    <div class="modal-box" style="max-width:650px;">
+        <div class="modal-header">
+            <span>⚙️ Settings Templates</span>
+            <button class="btn btn-small" onclick="closeTemplatesModal()">×</button>
+        </div>
+        <div class="modal-body" id="templates-body"></div>
+        <div class="modal-footer">
+            <button class="btn btn-success" onclick="addNewTemplate()">+ Add Template</button>
+            <button class="btn btn-primary" onclick="closeTemplatesModal()">Done</button>
+        </div>
+    </div>
+</div>
+
+<!-- Modelfile Modal -->
+<div id="modelfile-modal" class="modal-overlay">
+    <div class="modal-box" style="max-width:700px;">
+        <div class="modal-header">
+            <span>📄 Ollama Modelfile</span>
+            <button class="btn btn-small" onclick="closeModelfileModal()">×</button>
+        </div>
+        <div class="modal-body">
+            <pre id="modelfile-content"></pre>
+        </div>
+        <div class="modal-footer">
+            <button class="btn btn-copy" onclick="copyModelfile()">📋 Copy</button>
+            <button class="btn btn-primary" onclick="closeModelfileModal()">Close</button>
+        </div>
+    </div>
+</div>
+
 <script>
 let allModels = [];
 let runningModels = {};
 let savedParamsCache = {};
-let sortField = 'name';
-let sortDir = 1;   // 1 = asc, -1 = desc
+let sortField = 'status';  // default sort by status
+let sortDir = -1;          // -1 = desc (running first)
+let currentTab = 'llama';  // 'llama' or 'ollama'
+let templates = {};        // settings templates
 let vramInterval = null;
-const modelOrderMap = {};  // path -> original index (for stable re-insertion)
+const modelOrderMap = {};
 
 // Model loading states: path -> 'loading' | 'running' | 'error' | 'stopped'
 let modelLoadStates = {};
 // Log poll intervals for loading models
-let _logPollTimers = new Map();  // path -> interval id
+let _logPollTimers = new Map();
+
+const MODEL_PORT = {{ MODEL_PORT }};
+
+// Model paths are filesystem paths — just escape single quotes for inline JS
+const escAttr = (s) => s.replace(/'/g, String.fromCharCode(92) + "'");
 
 document.addEventListener('DOMContentLoaded', async () => {
-    // Load saved preferences first
     await loadPreferences();
+    await loadTemplates();
     refreshVRAM();
     loadModelsAndStatus();
 });
+
+// ── Preferences ────────────────────────────────────────────────────────
 
 async function loadPreferences() {
     try {
@@ -240,6 +355,128 @@ function savePreferences() {
     }).catch(() => {});
 }
 
+// ── Templates ──────────────────────────────────────────────────────────
+
+async function loadTemplates() {
+    try {
+        const resp = await fetch('/api/templates');
+        templates = await resp.json();
+    } catch (e) { templates = {}; }
+}
+
+async function saveTemplatesToServer() {
+    try {
+        await fetch('/api/templates', {
+            method: 'POST',
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify(templates)
+        });
+    } catch (e) {}
+}
+
+function showTemplatesModal() {
+    renderTemplatesModal();
+    document.getElementById('templates-modal').classList.add('visible');
+}
+
+function closeTemplatesModal() {
+    document.getElementById('templates-modal').classList.remove('visible');
+}
+
+function renderTemplatesModal() {
+    const body = document.getElementById('templates-body');
+    let html = '<div style="margin-bottom:12px;color:#565f89;font-size:0.8rem;">Templates define inference settings (temperature, top_p, etc.). Context size and KV-cache are configured per-model.</div>';
+
+    for (const [name, params] of Object.entries(templates)) {
+        const paramStr = `temp=${params.temp}, top_p=${params.top_p}, top_k=${params.top_k}, min_p=${params.min_p}, pres=${params.presence_penalty}, rep=${params.repeat_penalty}`;
+        html += `<div class="template-item">`;
+        html += `<div><div class="template-name">${name}</div><div class="template-params">${paramStr}</div></div>`;
+        html += `<div class="template-actions">`;
+        html += `<button class="btn btn-small btn-primary" onclick="editTemplate('${escAttr(name)}')">✏️ Edit</button>`;
+        html += `<button class="btn btn-small btn-danger" onclick="deleteTemplate('${escAttr(name)}')">🗑</button>`;
+        html += `</div></div>`;
+    }
+
+    if (Object.keys(templates).length === 0) {
+        html += '<div style="text-align:center;color:#565f89;padding:20px;">No templates yet. Click "+ Add Template" to create one.</div>';
+    }
+
+    body.innerHTML = html;
+}
+
+function addNewTemplate() {
+    const name = prompt('Template name:');
+    if (!name) return;
+    if (templates[name]) { showToast('Template already exists', 'error'); return; }
+    templates[name] = { temp: 0.7, top_p: 0.9, top_k: 20, min_p: 0.0, presence_penalty: 0.0, repeat_penalty: 1.0, num_predict: 1024 };
+    saveTemplatesToServer();
+    renderTemplatesModal();
+    showToast(`Template "${name}" created`, 'success');
+}
+
+function editTemplate(name) {
+    const params = templates[name];
+    if (!params) return;
+    const body = document.getElementById('templates-body');
+    const fields = [
+        { key: 'temp', label: 'Temperature', step: '0.1' },
+        { key: 'top_p', label: 'Top P', step: '0.05' },
+        { key: 'top_k', label: 'Top K', step: '1' },
+        { key: 'min_p', label: 'Min P', step: '0.05' },
+        { key: 'presence_penalty', label: 'Presence Penalty', step: '0.1' },
+        { key: 'repeat_penalty', label: 'Repeat Penalty', step: '0.05' },
+        { key: 'num_predict', label: 'Num Predict', step: '1' },
+    ];
+    let html = `<div class="template-edit-form">`;
+    html += `<div style="color:#bb9af7;font-weight:bold;margin-bottom:8px;">Editing: ${name}</div>`;
+    for (const f of fields) {
+        html += `<div class="form-row"><label>${f.label}</label><input type="number" id="tpl-${f.key}" value="${params[f.key] !== undefined ? params[f.key] : ''}" step="${f.step}"></div>`;
+    }
+    html += `<div style="display:flex;gap:6px;margin-top:8px;">`;
+    html += `<button class="btn btn-success" onclick="saveTemplateEdit('${escAttr(name)}')">💾 Save</button>`;
+    html += `<button class="btn btn-primary" onclick="renderTemplatesModal()">Cancel</button>`;
+    html += `</div></div>`;
+    body.innerHTML = html;
+}
+
+function saveTemplateEdit(name) {
+    const fields = ['temp', 'top_p', 'top_k', 'min_p', 'presence_penalty', 'repeat_penalty', 'num_predict'];
+    const params = {};
+    for (const f of fields) {
+        const el = document.getElementById(`tpl-${f}`);
+        params[f] = el ? parseFloat(el.value) : 0;
+    }
+    templates[name] = params;
+    saveTemplatesToServer();
+    renderTemplatesModal();
+    showToast(`Template "${name}" saved`, 'success');
+    // Re-render models to update template dropdowns
+    renderModels();
+}
+
+function deleteTemplate(name) {
+    if (!confirm(`Delete template "${name}"?`)) return;
+    delete templates[name];
+    saveTemplatesToServer();
+    renderTemplatesModal();
+    showToast(`Template "${name}" deleted`, 'info');
+    renderModels();
+}
+
+// ── Tab switching ──────────────────────────────────────────────────────
+
+function switchTab(tab) {
+    currentTab = tab;
+    document.querySelectorAll('.tab-btn').forEach(b => {
+        b.classList.toggle('active', b.dataset.tab === tab);
+    });
+    // Close all open config panels
+    document.querySelectorAll('.config-panel.visible').forEach(p => p.classList.remove('visible'));
+    renderModels();
+}
+
+// ── Persistent run states ──────────────────────────────────────────────
+
 async function loadPersistentRunStates() {
     try {
         const resp = await fetch('/api/run-states');
@@ -257,6 +494,8 @@ async function loadPersistentRunStates() {
         }
     } catch (e) { /* ignore on startup */ }
 }
+
+// ── VRAM ───────────────────────────────────────────────────────────────
 
 async function refreshVRAM() {
     try {
@@ -284,6 +523,8 @@ function renderVRAM(data) {
     el.innerHTML = html;
 }
 
+// ── Load models & status ───────────────────────────────────────────────
+
 async function loadModelsAndStatus() {
     try {
         const [modelsResp, statusResp, paramsResp] = await Promise.all([
@@ -310,58 +551,63 @@ async function loadModelsAndStatus() {
     } catch (e) { console.error('Failed to load:', e); }
 }
 
+// ── Sorting ────────────────────────────────────────────────────────────
+
 function setSort(field) {
     if (sortField === field) sortDir *= -1;
-    else { sortField = field; sortDir = 1; }
+    else { sortField = field; sortDir = field === 'status' ? -1 : 1; }
     savePreferences();
     renderModels();
+}
+
+function getStatusPriority(model) {
+    const state = modelLoadStates[model.path];
+    const running = runningModels[model.path];
+    if (running) return 4;
+    if (state === 'loading') return 3;
+    if (state === 'error') return 2;
+    return 1; // stopped
 }
 
 function getSortedFiltered() {
     const filter = document.getElementById('search-input').value.toLowerCase();
 
-    // Find the currently running model path (so we can always show it)
-    let currentlyRunningPath = null;
-    for (const path of Object.keys(runningModels)) {
-        currentlyRunningPath = path;
-        break;
-    }
-
     let filtered = allModels.filter(m => {
-        // Always include the currently running model, even if it doesn't match filter
-        if (m.path === currentlyRunningPath) return true;
         return m.name.toLowerCase().includes(filter) || (m.path && m.path.toLowerCase().includes(filter));
     });
 
-        // Sort
-        filtered.sort((a, b) => {
-            if (sortField === 'name') return a.name.localeCompare(b.name) * sortDir;
-            if (sortField === 'size') {
-                const sa = a.size_gb || 0;
-                const sb = b.size_gb || 0;
-                return (sa - sb) * sortDir;
-            }
-            if (sortField === 'date') {
-                const da = a.mtime || 0;
-                const db = b.mtime || 0;
-                return (da - db) * sortDir;
-            }
-            return 0;
-        });
+    // Sort
+    filtered.sort((a, b) => {
+        if (sortField === 'name') return a.name.localeCompare(b.name) * sortDir;
+        if (sortField === 'size') {
+            return ((a.size_gb || 0) - (b.size_gb || 0)) * sortDir;
+        }
+        if (sortField === 'date') {
+            return ((a.mtime || 0) - (b.mtime || 0)) * sortDir;
+        }
+        if (sortField === 'status') {
+            const pa = getStatusPriority(a);
+            const pb = getStatusPriority(b);
+            if (pa !== pb) return (pb - pa) * sortDir;  // higher priority first when desc
+            // Within same status, sort by last_run (newest first)
+            const la = a.last_run || 0;
+            const lb = b.last_run || 0;
+            return (lb - la);
+        }
+        return 0;
+    });
 
-    // Pin running models to top while preserving relative order within groups
-    const running = filtered.filter(m => runningModels[m.path] || modelLoadStates[m.path] === 'loading');
-    const stopped = filtered.filter(m => !runningModels[m.path] && modelLoadStates[m.path] !== 'loading');
-
-    return { running, stopped };
+    return filtered;
 }
+
+// ── Status display ─────────────────────────────────────────────────────
 
 function getStatusInfo(model) {
     const state = modelLoadStates[model.path];
     const running = runningModels[model.path];
 
     if (running) {
-        const ctx = running.ctx_size;  // shorthand: 80 = 80k
+        const ctx = running.ctx_size;
         const ctxDisplay = `${ctx}k`;
         return { cls: 'status-running', text: `● Running (${ctxDisplay})`, state: 'running' };
     }
@@ -374,10 +620,33 @@ function getStatusInfo(model) {
     return { cls: 'status-stopped', text: '○ Stopped', state: 'stopped' };
 }
 
+// ── Context display ────────────────────────────────────────────────────
+
+function getContextDisplay(model) {
+    const running = runningModels[model.path];
+    if (running && running.ctx_size != null) {
+        return `${running.ctx_size}k`;
+    }
+    const params = savedParamsCache[model.path];
+    if (params && params.ctx_size != null) {
+        return `${params.ctx_size}k`;
+    }
+    return '—';
+}
+
+// ── Render models ──────────────────────────────────────────────────────
+
 function renderModels() {
     const tbody = document.getElementById('model-list');
-    const { running, stopped } = getSortedFiltered();
-    const all = [...running, ...stopped];
+    const filtered = getSortedFiltered();
+
+    // Update sort arrows
+    document.querySelectorAll('.model-table th').forEach(th => {
+        th.classList.remove('sorted-asc', 'sorted-desc');
+        if (th.dataset.sort === sortField) {
+            th.classList.add(sortDir === 1 ? 'sorted-asc' : 'sorted-desc');
+        }
+    });
 
     if (allModels.length === 0) {
         tbody.innerHTML = '';
@@ -385,7 +654,7 @@ function renderModels() {
         return;
     }
 
-    if (all.length === 0) {
+    if (filtered.length === 0) {
         tbody.innerHTML = '<tr><td colspan="6" style="text-align:center;color:#565f89;padding:20px;">No models match filter</td></tr>';
         document.getElementById('no-models').style.display = 'none';
         return;
@@ -393,7 +662,7 @@ function renderModels() {
 
     document.getElementById('no-models').style.display = 'none';
     let html = '';
-    for (const model of all) {
+    for (const model of filtered) {
         const running = runningModels[model.path];
         const statusInfo = getStatusInfo(model);
         const isRunning = !!running;
@@ -408,35 +677,8 @@ function renderModels() {
         html += `<span class="model-path" title="${escAttr(model.path)}">${model.path}</span>`;
 
         // Config panel inline
-        html += `<div id="config-${h}" class="config-panel">`;
-        for (const field of ['ctx_size', 'temp', 'cache_type_k', 'cache_type_v', 'n_gpu_layers', 'speculative_decoding']) {
-            const label = { ctx_size: 'Context (k)', temp: 'Temp', cache_type_k: 'Cache K', cache_type_v: 'Cache V', n_gpu_layers: 'GPU Layers', speculative_decoding: 'Spec. Decoding' }[field];
-            const isCheckboxOnly = field === 'speculative_decoding';
-            const inputType = (field === 'cache_type_k' || field === 'cache_type_v') ? 'text' : 'number';
-            const stepAttr = field === 'temp' ? 'step="0.1"' : '';
-            const cbChecked = isCheckboxOnly ? '' : 'checked';
-            html += `<div class="form-group" id="fg-${h}-${field}">`;
-            html += `<label class="toggle-label"><input type="checkbox" ${cbChecked} onchange="toggleField('${h}','${field}',this.checked);autoSaveConfig('${escAttr(model.path)}','${h}')">${label}</label>`;
-            if (!isCheckboxOnly) {
-                if (inputType === 'number') {
-                    html += `<input type="${inputType}" id="${field}-${h}" ${stepAttr} oninput="autoSaveConfig('${escAttr(model.path)}','${h}')">`;
-                } else {
-                    html += `<input type="${inputType}" id="${field}-${h}" oninput="autoSaveConfig('${escAttr(model.path)}','${h}')">`;
-                }
-            }
-            html += `</div>`;
-        }
-        html += `<div style="display:flex;gap:6px;margin-top:4px;">`;
-        if (isRunning) {
-            html += `<button class="btn btn-danger btn-small" onclick="stopModel('${escAttr(model.path)}')">⏹ Stop</button>`;
-            html += `<button class="btn btn-warning btn-small" onclick="restartModel('${escAttr(model.path)}', '${h}')">⟳ Restart</button>`;
-        } else if (isLoading) {
-            html += `<button class="btn btn-danger btn-small" disabled><span class="spinner"></span> Starting...</button>`;
-        } else {
-            html += `<button class="btn btn-success btn-small" onclick="runFromConfig('${escAttr(model.path)}', '${h}')">▶ Run</button>`;
-        }
-        html += `<span id="msg-${h}" style="color:#73daca;font-size:0.75rem;"></span>`;
-        html += `</div></div></td>`;
+        html += generateConfigPanel(model, h, isRunning, isLoading);
+        html += `</td>`;
 
         // Size column
         const size = model.size_gb ? `${model.size_gb} GB` : '—';
@@ -450,47 +692,182 @@ function renderModels() {
         const ctxInfo = getContextDisplay(model);
         html += `<td style="color:#a9b1d6;font-size:0.8rem;text-align:center;">${ctxInfo}</td>`;
 
-        // Status column - clickable to copy model ID
+        // Status column
         html += `<td><span class="status ${statusInfo.cls}" onclick="copyModelIdFromStatus('${escAttr(model.name)}')" title="Click to copy model ID">${statusInfo.text}</span></td>`;
 
         // Actions column
         html += `<td style="display:flex;gap:4px;flex-wrap:wrap;">`;
         html += `<button class="btn btn-primary btn-small" onclick="toggleConfig('${escAttr(model.path)}')">⚙ Config</button>`;
-        if (isRunning) {
-            html += `<button class="btn btn-danger btn-small" onclick="stopModel('${escAttr(model.path)}')">⏹ Stop</button>`;
-            html += `<button class="btn btn-warning btn-small" onclick="restartModel('${escAttr(model.path)}', '${h}')">⟳ Restart</button>`;
-        } else if (isLoading) {
-            html += `<button class="btn btn-primary btn-small" disabled><span class="spinner"></span> Starting...</button>`;
+        if (currentTab === 'llama') {
+            if (isRunning) {
+                html += `<button class="btn btn-danger btn-small" onclick="stopModel('${escAttr(model.path)}')">⏹ Stop</button>`;
+                html += `<button class="btn btn-warning btn-small" onclick="restartModel('${escAttr(model.path)}', '${h}')">⟳ Restart</button>`;
+            } else if (isLoading) {
+                html += `<button class="btn btn-primary btn-small" disabled><span class="spinner"></span> Starting...</button>`;
+            } else {
+                html += `<button class="btn btn-success btn-small" onclick="runWithSaved('${escAttr(model.path)}', '${h}')">▶ Run</button>`;
+            }
         } else {
-            html += `<button class="btn btn-success btn-small" onclick="runWithSaved('${escAttr(model.path)}', '${h}')">▶ Run</button>`;
+            // Ollama tab buttons
+            html += `<button class="btn btn-ollama btn-small" onclick="createOllamaModelfile('${escAttr(model.path)}', '${h}')">🦙 Create Modelfile</button>`;
+            html += `<button class="btn btn-primary btn-small" onclick="viewModelfile('${escAttr(model.path)}')">📄 View</button>`;
         }
-        // Log button always visible — log file persists across runs
         html += `<button class="btn btn-primary btn-small" onclick="showLogModal('${escAttr(model.path)}', '${model.name}')">📋 Log</button>`;
         html += `</td></tr>`;
     }
     tbody.innerHTML = html;
 }
 
-function getContextDisplay(model) {
-    const running = runningModels[model.path];
-    if (running && running.ctx_size != null) {
-        // ctx_size is shorthand: 80 = 80k
-        return `${running.ctx_size}k`;
+// ── Config panel generation ────────────────────────────────────────────
+
+function generateConfigPanel(model, h, isRunning, isLoading) {
+    const isOllama = currentTab === 'ollama';
+    let html = `<div id="config-${h}" class="config-panel">`;
+
+    // Two columns: Context & Cache | Inference Settings
+    html += `<div class="config-columns">`;
+
+    // Left column: Context & Cache
+    html += `<div class="config-column">`;
+    html += `<div class="config-column-title">Context & Cache</div>`;
+    html += `<div class="config-grid-single">`;
+
+    // Context size
+    html += `<div class="form-group" id="fg-${h}-ctx_size">`;
+    html += `<label class="toggle-label"><input type="checkbox" checked onchange="toggleField('${h}','ctx_size',this.checked);autoSaveConfig('${escAttr(model.path)}','${h}')">Context (k)</label>`;
+    html += `<input type="number" id="ctx_size-${h}" step="10" oninput="autoSaveConfig('${escAttr(model.path)}','${h}')">`;
+    html += `</div>`;
+
+    // Cache type K (dropdown) - only for llama tab
+    if (!isOllama) {
+        html += `<div class="form-group" id="fg-${h}-cache_type_k">`;
+        html += `<label class="toggle-label"><input type="checkbox" onchange="toggleField('${h}','cache_type_k',this.checked);autoSaveConfig('${escAttr(model.path)}','${h}')">Cache K Quant</label>`;
+        html += `<select id="cache_type_k-${h}" onchange="autoSaveConfig('${escAttr(model.path)}','${h}')">`;
+        html += `<option value="q8_0">q8 (Best)</option>`;
+        html += `<option value="q4_0">q4</option>`;
+        html += `<option value="q4_1">q4_1</option>`;
+        html += `<option value="turbo">Turbo</option>`;
+        html += `</select></div>`;
+
+        // Cache type V (dropdown)
+        html += `<div class="form-group" id="fg-${h}-cache_type_v">`;
+        html += `<label class="toggle-label"><input type="checkbox" onchange="toggleField('${h}','cache_type_v',this.checked);autoSaveConfig('${escAttr(model.path)}','${h}')">Cache V Quant</label>`;
+        html += `<select id="cache_type_v-${h}" onchange="autoSaveConfig('${escAttr(model.path)}','${h}')">`;
+        html += `<option value="q8_0">q8 (Best)</option>`;
+        html += `<option value="q4_0">q4</option>`;
+        html += `<option value="q4_1">q4_1</option>`;
+        html += `<option value="turbo">Turbo</option>`;
+        html += `</select></div>`;
+
+        // GPU Layers
+        html += `<div class="form-group" id="fg-${h}-n_gpu_layers">`;
+        html += `<label class="toggle-label"><input type="checkbox" checked onchange="toggleField('${h}','n_gpu_layers',this.checked);autoSaveConfig('${escAttr(model.path)}','${h}')">GPU Layers</label>`;
+        html += `<input type="number" id="n_gpu_layers-${h}" oninput="autoSaveConfig('${escAttr(model.path)}','${h}')">`;
+        html += `</div>`;
     }
-    // Try saved params
-    const params = savedParamsCache[model.path];
-    if (params && params.ctx_size != null) {
-        // saved as shorthand (100 = 100k)
-        return `${params.ctx_size}k`;
+
+    html += `</div></div>`; // close left column
+
+    // Right column: Inference Settings
+    html += `<div class="config-column">`;
+    html += `<div class="config-column-title">Inference Settings</div>`;
+
+    // Template dropdown
+    html += `<div class="template-select-group">`;
+    html += `<label>Template</label>`;
+    html += `<select id="template-${h}" onchange="applyTemplateFromDropdown('${escAttr(model.path)}','${h}',this.value)">`;
+    html += `<option value="">Custom</option>`;
+    for (const tname of Object.keys(templates)) {
+        html += `<option value="${escAttr(tname)}">${tname}</option>`;
     }
-    return '—';
+    html += `</select></div>`;
+
+    html += `<div class="config-grid">`;
+
+    // Temperature
+    html += `<div class="form-group" id="fg-${h}-temp">`;
+    html += `<label class="toggle-label"><input type="checkbox" checked onchange="toggleField('${h}','temp',this.checked);autoSaveConfig('${escAttr(model.path)}','${h}')">Temperature</label>`;
+    html += `<input type="number" id="temp-${h}" step="0.1" oninput="autoSaveConfig('${escAttr(model.path)}','${h}')">`;
+    html += `</div>`;
+
+    // Top P
+    html += `<div class="form-group" id="fg-${h}-top_p">`;
+    html += `<label class="toggle-label"><input type="checkbox" checked onchange="toggleField('${h}','top_p',this.checked);autoSaveConfig('${escAttr(model.path)}','${h}')">Top P</label>`;
+    html += `<input type="number" id="top_p-${h}" step="0.05" oninput="autoSaveConfig('${escAttr(model.path)}','${h}')">`;
+    html += `</div>`;
+
+    // Top K
+    html += `<div class="form-group" id="fg-${h}-top_k">`;
+    html += `<label class="toggle-label"><input type="checkbox" checked onchange="toggleField('${h}','top_k',this.checked);autoSaveConfig('${escAttr(model.path)}','${h}')">Top K</label>`;
+    html += `<input type="number" id="top_k-${h}" step="1" oninput="autoSaveConfig('${escAttr(model.path)}','${h}')">`;
+    html += `</div>`;
+
+    // Min P
+    html += `<div class="form-group" id="fg-${h}-min_p">`;
+    html += `<label class="toggle-label"><input type="checkbox" checked onchange="toggleField('${h}','min_p',this.checked);autoSaveConfig('${escAttr(model.path)}','${h}')">Min P</label>`;
+    html += `<input type="number" id="min_p-${h}" step="0.05" oninput="autoSaveConfig('${escAttr(model.path)}','${h}')">`;
+    html += `</div>`;
+
+    // Presence Penalty
+    html += `<div class="form-group" id="fg-${h}-presence_penalty">`;
+    html += `<label class="toggle-label"><input type="checkbox" checked onchange="toggleField('${h}','presence_penalty',this.checked);autoSaveConfig('${escAttr(model.path)}','${h}')">Presence Penalty</label>`;
+    html += `<input type="number" id="presence_penalty-${h}" step="0.1" oninput="autoSaveConfig('${escAttr(model.path)}','${h}')">`;
+    html += `</div>`;
+
+    // Repeat Penalty
+    html += `<div class="form-group" id="fg-${h}-repeat_penalty">`;
+    html += `<label class="toggle-label"><input type="checkbox" checked onchange="toggleField('${h}','repeat_penalty',this.checked);autoSaveConfig('${escAttr(model.path)}','${h}')">Repeat Penalty</label>`;
+    html += `<input type="number" id="repeat_penalty-${h}" step="0.05" oninput="autoSaveConfig('${escAttr(model.path)}','${h}')">`;
+    html += `</div>`;
+
+    // Num Predict
+    html += `<div class="form-group" id="fg-${h}-num_predict">`;
+    html += `<label class="toggle-label"><input type="checkbox" checked onchange="toggleField('${h}','num_predict',this.checked);autoSaveConfig('${escAttr(model.path)}','${h}')">Num Predict</label>`;
+    html += `<input type="number" id="num_predict-${h}" step="1" oninput="autoSaveConfig('${escAttr(model.path)}','${h}')">`;
+    html += `</div>`;
+
+    html += `</div>`; // close config-grid
+    html += `</div></div>`; // close right column and config-columns
+
+    // Bottom row: Speculative decoding + action buttons
+    html += `<div class="config-bottom-row">`;
+
+    // Speculative decoding (only for llama tab)
+    if (!isOllama) {
+        html += `<div class="form-group" id="fg-${h}-speculative_decoding" style="margin-right:auto;">`;
+        html += `<label class="toggle-label"><input type="checkbox" onchange="toggleField('${h}','speculative_decoding',this.checked);autoSaveConfig('${escAttr(model.path)}','${h}')">Speculative Decoding</label>`;
+        html += `</div>`;
+    } else {
+        html += `<div style="margin-right:auto;"></div>`;
+    }
+
+    // Action buttons
+    if (currentTab === 'llama') {
+        if (isRunning) {
+            html += `<button class="btn btn-danger btn-small" onclick="stopModel('${escAttr(model.path)}')">⏹ Stop</button>`;
+            html += `<button class="btn btn-warning btn-small" onclick="restartModel('${escAttr(model.path)}', '${h}')">⟳ Restart</button>`;
+        } else if (isLoading) {
+            html += `<button class="btn btn-danger btn-small" disabled><span class="spinner"></span> Starting...</button>`;
+        } else {
+            html += `<button class="btn btn-success btn-small" onclick="runFromConfig('${escAttr(model.path)}', '${h}')">▶ Run</button>`;
+        }
+    } else {
+        html += `<button class="btn btn-ollama btn-small" onclick="createOllamaModelfile('${escAttr(model.path)}', '${h}')">🦙 Create & Run</button>`;
+        html += `<button class="btn btn-primary btn-small" onclick="viewModelfile('${escAttr(model.path)}')">📄 View</button>`;
+    }
+
+    html += `<span id="msg-${h}" style="color:#73daca;font-size:0.75rem;"></span>`;
+    html += `</div>`;
+
+    html += `</div>`; // close config-panel
+    return html;
 }
 
-function hashStr(s) { let h = 0; for (let i = 0; i < s.length; i++) { h = ((h << 5) - h) + s.charCodeAt(i); h |= 0; } return Math.abs(h).toString(36); }
-const MODEL_PORT = {{ MODEL_PORT }};
+// ── Hash function ──────────────────────────────────────────────────────
 
-// Model paths are filesystem paths — just escape single quotes for inline JS
-const escAttr = (s) => s.replace(/'/g, String.fromCharCode(92) + "'");
+function hashStr(s) { let h = 0; for (let i = 0; i < s.length; i++) { h = ((h << 5) - h) + s.charCodeAt(i); h |= 0; } return Math.abs(h).toString(36); }
+
+// ── Params load/save ───────────────────────────────────────────────────
 
 async function _loadParamsForModel(path) {
     if (savedParamsCache[path]) return savedParamsCache[path];
@@ -511,14 +888,20 @@ async function _saveParamsForModel(path, params) {
     return false;
 }
 
+// ── Toggle field ───────────────────────────────────────────────────────
+
 function toggleField(h, field, checked) {
     const fg = document.getElementById(`fg-${h}-${field}`);
     if (fg) {
         fg.classList.toggle('disabled', !checked);
         const input = fg.querySelector('input:not([type="checkbox"])');
+        const select = fg.querySelector('select');
         if (input) input.disabled = !checked;
+        if (select) select.disabled = !checked;
     }
 }
+
+// ── Toggle config panel ────────────────────────────────────────────────
 
 async function toggleConfig(path) {
     refreshVRAM();
@@ -528,55 +911,110 @@ async function toggleConfig(path) {
     if (panel.classList.toggle('visible')) {
         // Load params and populate
         const params = await _loadParamsForModel(path);
-        const defaults = { ctx_size: 100, temp: 0.2, cache_type_k: 'q8_0', cache_type_v: 'q8_0', n_gpu_layers: 999, speculative_decoding: false };
-        for (const field of ['ctx_size', 'temp', 'cache_type_k', 'cache_type_v', 'n_gpu_layers', 'speculative_decoding']) {
+        const defaults = { ctx_size: 100, temp: 0.2, top_p: 0.95, top_k: 20, min_p: 0.0, presence_penalty: 0.0, repeat_penalty: 1.0, num_predict: 1024, cache_type_k: 'q8_0', cache_type_v: 'q8_0', n_gpu_layers: 999, speculative_decoding: false };
+        const allFields = ['ctx_size', 'temp', 'top_p', 'top_k', 'min_p', 'presence_penalty', 'repeat_penalty', 'num_predict', 'cache_type_k', 'cache_type_v', 'n_gpu_layers', 'speculative_decoding'];
+
+        for (const field of allFields) {
             const input = document.getElementById(`${field}-${h}`);
             const fg = document.getElementById(`fg-${h}-${field}`);
             if (!fg) continue;
+            const val = params ? params[field] : defaults[field];
+
             if (input) {
-                const val = params ? params[field] : defaults[field];
-                input.value = val;
+                if (input.tagName === 'SELECT') {
+                    input.value = val;
+                } else {
+                    input.value = val;
+                }
             }
-            // Toggle checkbox — speculative_decoding and cache types default to disabled
+            // Toggle checkbox
             const disabledByDefault = ['cache_type_k', 'cache_type_v', 'speculative_decoding'];
             const enabled = params ? (params[`${field}_enabled`] !== false) : !disabledByDefault.includes(field);
             const cb = fg.querySelector('input[type="checkbox"]');
             if (cb) { cb.checked = enabled; toggleField(h, field, enabled); }
         }
+
+        // Set template dropdown
+        const templateSelect = document.getElementById(`template-${h}`);
+        if (templateSelect && params) {
+            templateSelect.value = params.template || '';
+        }
     }
 }
 
+// ── Apply template from dropdown ───────────────────────────────────────
+
+async function applyTemplateFromDropdown(path, h, templateName) {
+    if (!templateName) return;  // "Custom" selected
+    const tpl = templates[templateName];
+    if (!tpl) return;
+
+    const inferenceFields = ['temp', 'top_p', 'top_k', 'min_p', 'presence_penalty', 'repeat_penalty', 'num_predict'];
+    for (const field of inferenceFields) {
+        const input = document.getElementById(`${field}-${h}`);
+        if (input && tpl[field] !== undefined) {
+            input.value = tpl[field];
+        }
+    }
+
+    // Save template name with model params
+    await _saveParamsForModel(path, { ...tpl, template: templateName });
+
+    const msgEl = document.getElementById('msg-' + h);
+    if (msgEl) {
+        msgEl.innerHTML = `<span style="color:#bb9af7;font-size:0.7rem;">template: ${templateName}</span>`;
+        setTimeout(() => { if (msgEl) msgEl.innerHTML = ''; }, 2000);
+    }
+}
+
+// ── Collect config fields ──────────────────────────────────────────────
+
 function collectConfigFields(path, h) {
-    const fields = ['ctx_size', 'temp', 'cache_type_k', 'cache_type_v', 'n_gpu_layers', 'speculative_decoding'];
+    const allFields = ['ctx_size', 'temp', 'top_p', 'top_k', 'min_p', 'presence_penalty', 'repeat_penalty', 'num_predict', 'cache_type_k', 'cache_type_v', 'n_gpu_layers', 'speculative_decoding'];
     const result = {};
-    for (const field of fields) {
+    for (const field of allFields) {
         const fg = document.getElementById(`fg-${h}-${field}`);
         const cb = fg ? fg.querySelector('input[type="checkbox"]') : null;
         const input = document.getElementById(`${field}-${h}`);
+        // Skip fields not present in DOM (e.g., cache types in ollama tab)
+        if (!fg && !input) continue;
         result[`${field}_enabled`] = cb ? cb.checked : true;
         if (field === 'speculative_decoding') {
             result[field] = cb ? cb.checked : false;
         } else if (input) {
-            result[field] = (field === 'temp') ? parseFloat(input.value) : (field === 'n_gpu_layers' || field === 'ctx_size') ? parseInt(input.value) : input.value;
+            if (input.tagName === 'SELECT') {
+                result[field] = input.value;
+            } else if (field === 'temp' || field === 'top_p' || field === 'min_p' || field === 'presence_penalty' || field === 'repeat_penalty') {
+                result[field] = parseFloat(input.value);
+            } else if (field === 'n_gpu_layers' || field === 'ctx_size' || field === 'top_k' || field === 'num_predict') {
+                result[field] = parseInt(input.value);
+            } else {
+                result[field] = input.value;
+            }
         }
+    }
+    // Include template name
+    const templateSelect = document.getElementById(`template-${h}`);
+    if (templateSelect) {
+        result['template'] = templateSelect.value;
     }
     return result;
 }
 
+// ── Run models ─────────────────────────────────────────────────────────
+
 async function runWithSaved(path, h) {
-    // Check if another model is running
     const otherRunning = findOtherRunningModel(path);
     if (otherRunning) {
         showConflictModal(otherRunning, path);
         return;
     }
-
-    // Fetch saved params then run
     const params = await _loadParamsForModel(path);
-    if (!params) { toggleConfig(path); return; }  // open config to show defaults
+    if (!params) { toggleConfig(path); return; }
 
     const payload = { path };
-    for (const field of ['ctx_size', 'temp', 'cache_type_k', 'cache_type_v', 'n_gpu_layers', 'speculative_decoding']) {
+    const allFields = ['ctx_size', 'temp', 'top_p', 'top_k', 'min_p', 'presence_penalty', 'repeat_penalty', 'num_predict', 'cache_type_k', 'cache_type_v', 'n_gpu_layers', 'speculative_decoding'];
+    for (const field of allFields) {
         payload[`${field}_enabled`] = params[`${field}_enabled`] !== false;
         payload[field] = params[field];
     }
@@ -584,15 +1022,12 @@ async function runWithSaved(path, h) {
 }
 
 async function runFromConfig(path, h) {
-    // Check if another model is running
     const otherRunning = findOtherRunningModel(path);
     if (otherRunning) {
         showConflictModal(otherRunning, path);
         return;
     }
-
     const config = collectConfigFields(path, h);
-    // Auto-save then run
     await _saveParamsForModel(path, config);
     const payload = { path, ...config };
     doRun(path, h, payload);
@@ -622,12 +1057,9 @@ async function doRun(path, h, payload) {
             msgEl.innerHTML = '<span style="color:#9ece6a">✓ Started</span>';
             refreshVRAM();
 
-            // Look up model name and start polling for model status
             const model = allModels.find(m => m.path === path);
             const modelName = model ? model.name : path;
             startModelStatusPoll(path, modelName);
-
-            // Don't update status yet - wait for log polling to detect success/error
         } else {
             msgEl.innerHTML = `<span style="color:#f7768e">✗ ${data.error || 'Failed'}</span>`;
             modelLoadStates[path] = 'error';
@@ -642,8 +1074,6 @@ async function doRun(path, h, payload) {
 
 async function restartModel(path, h) {
     const modelName = allModels.find(m => m.path === path)?.name || path;
-
-    // Stop the model first
     stopModelInfoPoll(path);
     hideNotification();
 
@@ -651,19 +1081,18 @@ async function restartModel(path, h) {
         await fetch('/api/models/stop', { method: 'POST', headers: {'Content-Type':'application/json'}, body: JSON.stringify({path}) });
     } catch (e) { /* ignore */ }
 
-    // Wait a bit then start again with saved params
     await new Promise(r => setTimeout(r, 1000));
 
     const params = await _loadParamsForModel(path);
     if (!params) return;
 
     const payload = { path };
-    for (const field of ['ctx_size', 'temp', 'cache_type_k', 'cache_type_v', 'n_gpu_layers', 'speculative_decoding']) {
+    const allFields = ['ctx_size', 'temp', 'top_p', 'top_k', 'min_p', 'presence_penalty', 'repeat_penalty', 'num_predict', 'cache_type_k', 'cache_type_v', 'n_gpu_layers', 'speculative_decoding'];
+    for (const field of allFields) {
         payload[`${field}_enabled`] = params[`${field}_enabled`] !== false;
         payload[field] = params[field];
     }
 
-    // Set loading state and render
     modelLoadStates[path] = 'loading';
     renderModels();
 
@@ -682,7 +1111,8 @@ async function restartModel(path, h) {
     }
 }
 
-// Debounced auto-save - saves config changes automatically
+// ── Auto-save config ───────────────────────────────────────────────────
+
 let _autoSaveTimeout = null;
 function autoSaveConfig(path, h) {
     if (_autoSaveTimeout) clearTimeout(_autoSaveTimeout);
@@ -692,13 +1122,14 @@ function autoSaveConfig(path, h) {
         const msgEl = document.getElementById('msg-' + h);
         if (msgEl) {
             msgEl.innerHTML = '<span style="color:#7aa2f7;font-size:0.7rem;">saved</span>';
-            setTimeout(() => { msgEl.innerHTML = ''; }, 1500);
+            setTimeout(() => { if (msgEl) msgEl.innerHTML = ''; }, 1500);
         }
     }, 500);
 }
 
+// ── Stop model ─────────────────────────────────────────────────────────
+
 async function stopModel(path) {
-    // Cancel any active poll for this model and hide notification
     stopModelInfoPoll(path);
     hideNotification();
     delete modelLoadStates[path];
@@ -713,7 +1144,7 @@ async function stopModel(path) {
     } catch (e) { alert('Error stopping model: ' + e.message); }
 }
 
-// ── Toast notifications ─────────────────────────────────────────────────
+// ── Toast notifications ────────────────────────────────────────────────
 
 function showToast(message, type = 'info', duration = 2500) {
     const container = document.getElementById('toast-container');
@@ -728,10 +1159,9 @@ function showToast(message, type = 'info', duration = 2500) {
     }, duration);
 }
 
-// ── Copy model ID from status field ──────────────────────────────────────
+// ── Copy model ID from status field ────────────────────────────────────
 
 function copyModelIdFromStatus(path) {
-    // Use reliable clipboard copy
     if (navigator.clipboard && navigator.clipboard.writeText) {
         navigator.clipboard.writeText(path).then(() => {
             showToast(`Model ID copied to clipboard`, 'success');
@@ -759,7 +1189,7 @@ function fallbackCopy(text) {
     document.body.removeChild(ta);
 }
 
-// ── Conflict modal ───────────────────────────────────────────────────────
+// ── Conflict modal ─────────────────────────────────────────────────────
 
 function showConflictModal(runningModel, requestedPath) {
     const modal = document.getElementById('conflict-modal');
@@ -788,7 +1218,6 @@ function closeConflictModal() {
 async function stopAndStopStart(stoppedPath, startPath) {
     closeConflictModal();
 
-    // Stop the running model
     stopModelInfoPoll(stoppedPath);
     hideNotification();
     delete modelLoadStates[stoppedPath];
@@ -797,16 +1226,15 @@ async function stopAndStopStart(stoppedPath, startPath) {
         await fetch('/api/models/stop', { method: 'POST', headers: {'Content-Type':'application/json'}, body: JSON.stringify({path: stoppedPath}) });
     } catch (e) { /* ignore */ }
 
-    // Wait a moment then start the new model
     await new Promise(r => setTimeout(r, 1500));
 
-    // Load params and start
     const startH = hashStr(startPath);
     const params = await _loadParamsForModel(startPath);
     if (!params) return;
 
     const payload = { path: startPath };
-    for (const field of ['ctx_size', 'temp', 'cache_type_k', 'cache_type_v', 'n_gpu_layers', 'speculative_decoding']) {
+    const allFields = ['ctx_size', 'temp', 'top_p', 'top_k', 'min_p', 'presence_penalty', 'repeat_penalty', 'num_predict', 'cache_type_k', 'cache_type_v', 'n_gpu_layers', 'speculative_decoding'];
+    for (const field of allFields) {
         payload[`${field}_enabled`] = params[`${field}_enabled`] !== false;
         payload[field] = params[field];
     }
@@ -833,7 +1261,7 @@ async function stopAndStopStart(stoppedPath, startPath) {
 // Wire the conflict modal button to the correct function
 window.stopAndStart = stopAndStopStart;
 
-// ── Model status polling (log-based) ────────────────────────────────────
+// ── Model status polling (log-based) ───────────────────────────────────
 
 function startModelStatusPoll(path, modelName) {
     stopModelInfoPoll(path);
@@ -842,7 +1270,7 @@ function startModelStatusPoll(path, modelName) {
     showNotification(`⏳ ${modelName} starting…`, 'Waiting for model to load…');
 
     let attempts = 0;
-    const maxAttempts = 120; // poll up to 120 seconds
+    const maxAttempts = 120;
 
     const timer = setInterval(async () => {
         attempts++;
@@ -855,18 +1283,15 @@ function startModelStatusPoll(path, modelName) {
             // Check for success: server is listening
             const successMatch = lines.find(l => l.includes('server is listening on'));
             if (successMatch) {
-                // Model loaded successfully
                 modelLoadStates[path] = 'running';
                 clearInterval(timer);
                 stopModelInfoPoll(path);
-                // Notify server so it records 'running' in persistent history
                 fetch('/api/models/run-success', {
                     method: 'POST',
                     headers: {'Content-Type': 'application/json'},
                     body: JSON.stringify({path})
                 }).catch(() => {});
                 hideNotification();
-                // Update runningModels to reflect current state
                 loadModelsAndStatus();
                 return;
             }
@@ -891,12 +1316,10 @@ function startModelStatusPoll(path, modelName) {
             for (const line of lines) {
                 for (const pattern of errorPatterns) {
                     if (pattern.test(line)) {
-                        // Model failed to load
                         modelLoadStates[path] = 'error';
                         clearInterval(timer);
                         stopModelInfoPoll(path);
                         const errorMsg = line.trim().substring(0, 100);
-                        // Notify server so it records 'error' in persistent history
                         fetch('/api/models/run-error', {
                             method: 'POST',
                             headers: {'Content-Type': 'application/json'},
@@ -909,13 +1332,11 @@ function startModelStatusPoll(path, modelName) {
                 }
             }
 
-            // Still loading — update notification
+            // Still loading
             if (attempts >= maxAttempts) {
-                // Timeout — but model might still be loading, keep status as loading
                 clearInterval(timer);
                 stopModelInfoPoll(path);
                 hideNotification();
-                // Don't change state, keep as loading
             } else {
                 bannerText.innerHTML = `<span class="spinner"></span> Loading… (${attempts}s)`;
             }
@@ -926,7 +1347,7 @@ function startModelStatusPoll(path, modelName) {
     _logPollTimers.set(path, timer);
 }
 
-// ── Notification helpers ────────────────────────────────────────────────
+// ── Notification helpers ───────────────────────────────────────────────
 
 function hideNotification() {
     document.getElementById('notification-banner').classList.remove('visible');
@@ -949,9 +1370,9 @@ function stopModelInfoPoll(path) {
     if (timer) { clearInterval(timer); _logPollTimers.delete(path); }
 }
 
-// ── Log Modal ───────────────────────────────────────────────────────────
+// ── Log Modal ──────────────────────────────────────────────────────────
 
-let _currentLogPath = null;  // path of model currently being viewed in log modal
+let _currentLogPath = null;
 
 function showLogModal(path, name) {
     _currentLogPath = path;
@@ -972,12 +1393,76 @@ async function fetchModelLog() {
         const resp = await fetch('/api/model-log/' + encodeURIComponent(_currentLogPath));
         const data = await resp.json();
         bodyEl.textContent = (data.lines || []).join('\n');
-        // Scroll to bottom
         bodyEl.scrollTop = bodyEl.scrollHeight;
     } catch (e) {
         bodyEl.textContent = 'Failed to load log: ' + e.message;
     }
 }
+
+// ── Ollama functions ───────────────────────────────────────────────────
+
+async function createOllamaModelfile(path, h) {
+    const msgEl = document.getElementById('msg-' + h);
+    if (msgEl) msgEl.innerHTML = '<span class="spinner"></span> Creating...';
+
+    const config = collectConfigFields(path, h);
+    await _saveParamsForModel(path, config);
+
+    try {
+        const resp = await fetch('/api/ollama/run', {
+            method: 'POST',
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify({ path, params: config })
+        });
+        const data = await resp.json();
+        if (data.ok) {
+            if (msgEl) msgEl.innerHTML = '<span style="color:#bb9af7">✓ Ollama model created</span>';
+            showToast(`Ollama model created: ${data.ollama_name}`, 'success');
+        } else {
+            if (msgEl) msgEl.innerHTML = `<span style="color:#f7768e">✗ ${data.error || 'Failed'}</span>`;
+            showToast(`Ollama error: ${data.error}`, 'error');
+        }
+    } catch (e) {
+        if (msgEl) msgEl.innerHTML = `<span style="color:#f7768e">✗ ${e.message}</span>`;
+    }
+}
+
+async function viewModelfile(path) {
+    try {
+        const params = savedParamsCache[path] || await _loadParamsForModel(path);
+        const resp = await fetch('/api/ollama/modelfile', {
+            method: 'POST',
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify({ path, params: params || {} })
+        });
+        const data = await resp.json();
+        if (data.ok) {
+            document.getElementById('modelfile-content').textContent = data.content;
+            document.getElementById('modelfile-modal').classList.add('visible');
+        } else {
+            showToast(`Failed to generate modelfile: ${data.error}`, 'error');
+        }
+    } catch (e) {
+        showToast(`Error: ${e.message}`, 'error');
+    }
+}
+
+function closeModelfileModal() {
+    document.getElementById('modelfile-modal').classList.remove('visible');
+}
+
+function copyModelfile() {
+    const content = document.getElementById('modelfile-content').textContent;
+    if (navigator.clipboard && navigator.clipboard.writeText) {
+        navigator.clipboard.writeText(content).then(() => {
+            showToast('Modelfile copied to clipboard', 'success');
+        }).catch(() => fallbackCopy(content));
+    } else {
+        fallbackCopy(content);
+    }
+}
+
+// ── Refresh ────────────────────────────────────────────────────────────
 
 async function refreshModels() { await loadModelsAndStatus(); }
 </script>

@@ -1,5 +1,7 @@
 .venv/
 .env
 logs/
+ollama/
 model_params.json
 run_history.json
+settings_templates.json
