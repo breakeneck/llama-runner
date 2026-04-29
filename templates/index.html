@@ -385,12 +385,19 @@ function closeTemplatesModal() {
 
 function renderTemplatesModal() {
     const body = document.getElementById('templates-body');
-    let html = '<div style="margin-bottom:12px;color:#565f89;font-size:0.8rem;">Templates define inference settings (temperature, top_p, etc.). Context size and KV-cache are configured per-model.</div>';
+    let html = '<div style="margin-bottom:12px;color:#565f89;font-size:0.8rem;">Templates define inference settings (temperature, top_p, etc.). Enable/disable each parameter per template. Context size and KV-cache are configured per-model.</div>';
 
     for (const [name, params] of Object.entries(templates)) {
-        const paramStr = `temp=${params.temp}, top_p=${params.top_p}, top_k=${params.top_k}, min_p=${params.min_p}, pres=${params.presence_penalty}, rep=${params.repeat_penalty}`;
+        const inferenceFields = ['temp', 'top_p', 'top_k', 'min_p', 'presence_penalty', 'repeat_penalty', 'num_predict'];
+        const parts = [];
+        for (const f of inferenceFields) {
+            const enabled = params[`${f}_enabled`] !== false;
+            const val = params[f] !== undefined ? params[f] : '—';
+            parts.push(`${enabled ? '' : '⊘'} ${f}=${val}`);
+        }
+        const paramStr = parts.join(', ');
         html += `<div class="template-item">`;
-        html += `<div><div class="template-name">${name}</div><div class="template-params">${paramStr}</div></div>`;
+        html += `<div><div class="template-name">${name}</div><div class="template-params" style="font-size:0.65rem;">${paramStr}</div></div>`;
         html += `<div class="template-actions">`;
         html += `<button class="btn btn-small btn-primary" onclick="editTemplate('${escAttr(name)}')">✏️ Edit</button>`;
         html += `<button class="btn btn-small btn-danger" onclick="deleteTemplate('${escAttr(name)}')">🗑</button>`;
@@ -408,7 +415,15 @@ function addNewTemplate() {
     const name = prompt('Template name:');
     if (!name) return;
     if (templates[name]) { showToast('Template already exists', 'error'); return; }
-    templates[name] = { temp: 0.7, top_p: 0.9, top_k: 20, min_p: 0.0, presence_penalty: 0.0, repeat_penalty: 1.0, num_predict: 1024 };
+    templates[name] = {
+        temp: 0.7, temp_enabled: true,
+        top_p: 0.9, top_p_enabled: true,
+        top_k: 20, top_k_enabled: true,
+        min_p: 0.0, min_p_enabled: false,
+        presence_penalty: 0.0, presence_penalty_enabled: false,
+        repeat_penalty: 1.0, repeat_penalty_enabled: true,
+        num_predict: 1024, num_predict_enabled: true,
+    };
     saveTemplatesToServer();
     renderTemplatesModal();
     showToast(`Template "${name}" created`, 'success');
@@ -429,14 +444,34 @@ function editTemplate(name) {
     ];
     let html = `<div class="template-edit-form">`;
     html += `<div style="color:#bb9af7;font-weight:bold;margin-bottom:8px;">Editing: ${name}</div>`;
+    html += `<div style="color:#565f89;font-size:0.7rem;margin-bottom:8px;">☐ = disabled (won't be passed to server). ☑ = enabled.</div>`;
     for (const f of fields) {
-        html += `<div class="form-row"><label>${f.label}</label><input type="number" id="tpl-${f.key}" value="${params[f.key] !== undefined ? params[f.key] : ''}" step="${f.step}"></div>`;
+        const enabled = params[`${f.key}_enabled`] !== false;
+        html += `<div class="form-row">`;
+        html += `<input type="checkbox" id="tpl-en-${f.key}" ${enabled ? 'checked' : ''} style="accent-color:#7aa2f7;width:16px;height:16px;cursor:pointer;" title="Enable/disable ${f.label}">`;
+        html += `<label style="min-width:100px;font-size:0.75rem;color:#7aa2f7;${enabled ? '' : 'opacity:0.4;'}" id="tpl-lbl-${f.key}">${f.label}</label>`;
+        html += `<input type="number" id="tpl-${f.key}" value="${params[f.key] !== undefined ? params[f.key] : ''}" step="${f.step}" style="${enabled ? '' : 'opacity:0.4;'}">`;
+        html += `</div>`;
     }
     html += `<div style="display:flex;gap:6px;margin-top:8px;">`;
     html += `<button class="btn btn-success" onclick="saveTemplateEdit('${escAttr(name)}')">💾 Save</button>`;
     html += `<button class="btn btn-primary" onclick="renderTemplatesModal()">Cancel</button>`;
     html += `</div></div>`;
     body.innerHTML = html;
+
+    // Wire up checkbox toggle for each field
+    for (const f of fields) {
+        const cb = document.getElementById(`tpl-en-${f.key}`);
+        const input = document.getElementById(`tpl-${f.key}`);
+        const lbl = document.getElementById(`tpl-lbl-${f.key}`);
+        if (cb) {
+            cb.addEventListener('change', () => {
+                const on = cb.checked;
+                if (input) input.style.opacity = on ? '1' : '0.4';
+                if (lbl) lbl.style.opacity = on ? '1' : '0.4';
+            });
+        }
+    }
 }
 
 function saveTemplateEdit(name) {
@@ -444,7 +479,9 @@ function saveTemplateEdit(name) {
     const params = {};
     for (const f of fields) {
         const el = document.getElementById(`tpl-${f}`);
+        const cb = document.getElementById(`tpl-en-${f}`);
         params[f] = el ? parseFloat(el.value) : 0;
+        params[`${f}_enabled`] = cb ? cb.checked : true;
     }
     templates[name] = params;
     saveTemplatesToServer();
@@ -952,12 +989,23 @@ async function applyTemplateFromDropdown(path, h, templateName) {
     const inferenceFields = ['temp', 'top_p', 'top_k', 'min_p', 'presence_penalty', 'repeat_penalty', 'num_predict'];
     for (const field of inferenceFields) {
         const input = document.getElementById(`${field}-${h}`);
+        const fg = document.getElementById(`fg-${h}-${field}`);
+        const cb = fg ? fg.querySelector('input[type="checkbox"]') : null;
+
+        // Set value
         if (input && tpl[field] !== undefined) {
             input.value = tpl[field];
         }
+
+        // Set enabled/disabled state from template
+        const enabled = tpl[`${field}_enabled`] !== false;
+        if (cb) {
+            cb.checked = enabled;
+            toggleField(h, field, enabled);
+        }
     }
 
-    // Save template name with model params
+    // Save template name with model params (including _enabled flags)
     await _saveParamsForModel(path, { ...tpl, template: templateName });
 
     const msgEl = document.getElementById('msg-' + h);

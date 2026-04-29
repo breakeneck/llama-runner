@@ -75,19 +75,34 @@ _TOGGLED_PARAMS = {
 # Params affected by templates (inference settings)
 _INFERENCE_PARAMS = {'temp', 'top_p', 'top_k', 'min_p', 'presence_penalty', 'repeat_penalty', 'num_predict'}
 
-# Default settings templates
+# Default settings templates (include _enabled flags for each param)
 _DEFAULT_TEMPLATES = {
     'Thinking (General)': {
-        'temp': 1.0, 'top_p': 0.95, 'top_k': 20, 'min_p': 0.0,
-        'presence_penalty': 0.0, 'repeat_penalty': 1.0, 'num_predict': 1024,
+        'temp': 1.0, 'temp_enabled': True,
+        'top_p': 0.95, 'top_p_enabled': True,
+        'top_k': 20, 'top_k_enabled': True,
+        'min_p': 0.0, 'min_p_enabled': False,
+        'presence_penalty': 0.0, 'presence_penalty_enabled': False,
+        'repeat_penalty': 1.0, 'repeat_penalty_enabled': True,
+        'num_predict': 1024, 'num_predict_enabled': True,
     },
     'Thinking (Coding)': {
-        'temp': 0.6, 'top_p': 0.95, 'top_k': 20, 'min_p': 0.0,
-        'presence_penalty': 0.0, 'repeat_penalty': 1.0, 'num_predict': 1024,
+        'temp': 0.6, 'temp_enabled': True,
+        'top_p': 0.95, 'top_p_enabled': True,
+        'top_k': 20, 'top_k_enabled': True,
+        'min_p': 0.0, 'min_p_enabled': False,
+        'presence_penalty': 0.0, 'presence_penalty_enabled': False,
+        'repeat_penalty': 1.0, 'repeat_penalty_enabled': True,
+        'num_predict': 1024, 'num_predict_enabled': True,
     },
     'Instruct': {
-        'temp': 0.7, 'top_p': 0.80, 'top_k': 20, 'min_p': 0.0,
-        'presence_penalty': 1.5, 'repeat_penalty': 1.0, 'num_predict': 1024,
+        'temp': 0.7, 'temp_enabled': True,
+        'top_p': 0.80, 'top_p_enabled': True,
+        'top_k': 20, 'top_k_enabled': True,
+        'min_p': 0.0, 'min_p_enabled': False,
+        'presence_penalty': 1.5, 'presence_penalty_enabled': True,
+        'repeat_penalty': 1.0, 'repeat_penalty_enabled': True,
+        'num_predict': 1024, 'num_predict_enabled': True,
     },
 }
 
