@@ -286,9 +286,10 @@ function renderVRAM(data) {
 
 async function loadModelsAndStatus() {
     try {
-        const [modelsResp, statusResp] = await Promise.all([
+        const [modelsResp, statusResp, paramsResp] = await Promise.all([
             fetch('/api/models'),
-            fetch('/api/status')
+            fetch('/api/status'),
+            fetch('/api/all-params'),
         ]);
         allModels = await modelsResp.json();
         // Assign original indices for stable ordering
@@ -297,6 +298,11 @@ async function loadModelsAndStatus() {
         runningModels = {};
         for (const m of status.running) {
             runningModels[m.path] = m;
+        }
+        // Pre-load all saved params into cache
+        const allParams = await paramsResp.json();
+        for (const [path, params] of Object.entries(allParams)) {
+            savedParamsCache[path] = params;
         }
         // Restore persistent error states from server
         await loadPersistentRunStates();
@@ -355,8 +361,8 @@ function getStatusInfo(model) {
     const running = runningModels[model.path];
 
     if (running) {
-        const ctx = running.ctx_size;
-        const ctxDisplay = ctx >= 1000 ? `${(ctx / 1000).toFixed(ctx % 1000 === 0 ? 0 : 1)}k` : `${ctx}`;
+        const ctx = running.ctx_size;  // shorthand: 80 = 80k
+        const ctxDisplay = `${ctx}k`;
         return { cls: 'status-running', text: `● Running (${ctxDisplay})`, state: 'running' };
     }
     if (state === 'loading') {
@@ -463,15 +469,15 @@ function renderModels() {
 
 function getContextDisplay(model) {
     const running = runningModels[model.path];
-    if (running && running.ctx_size) {
-        const ctx = running.ctx_size;
-        return ctx >= 1000 ? `${(ctx / 1000).toFixed(ctx % 1000 === 0 ? 0 : 1)}k` : `${ctx}`;
+    if (running && running.ctx_size != null) {
+        // ctx_size is shorthand: 80 = 80k
+        return `${running.ctx_size}k`;
     }
     // Try saved params
     const params = savedParamsCache[model.path];
     if (params && params.ctx_size != null) {
-        const ctx = params.ctx_size * 1000;  // saved as shorthand (100 = 100k)
-        return ctx >= 1000 ? `${(ctx / 1000).toFixed(ctx % 1000 === 0 ? 0 : 1)}k` : `${ctx}`;
+        // saved as shorthand (100 = 100k)
+        return `${params.ctx_size}k`;
     }
     return '—';
 }

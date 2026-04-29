@@ -277,7 +277,7 @@ def api_status():
             'path': path,
             'pid': v['pid'],
             'port': v['port'],
-            'ctx_size': v.get('ctx_size', 200000),
+            'ctx_size': v.get('ctx_size', 200),          # shorthand: 200 = 200k
             'temp': v.get('temp', 0.2),
             'cache_type_k': v.get('cache_type_k', 'q8_0'),
             'cache_type_v': v.get('cache_type_v', 'q8_0'),
@@ -500,6 +500,18 @@ def api_save_model_params():
     params = {k: v for k, v in data.items() if k != 'path'}
     save_model_params(path, params)
     return jsonify({'ok': True})
+
+
+@app.route('/api/all-params')
+def api_all_params():
+    """Return saved parameters for all models (for bulk pre-loading)."""
+    all_params = _load_params()
+    result = {}
+    for path, saved in all_params.items():
+        if path.startswith('_'):
+            continue  # skip internal keys like _preferences
+        result[path] = get_model_params(path)
+    return jsonify(result)
 
 
 @app.route('/api/preferences')
