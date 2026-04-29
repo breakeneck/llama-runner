@@ -58,7 +58,6 @@ _DEFAULT_PARAMS = {
     'min_p': 0.0,
     'presence_penalty': 0.0,
     'repeat_penalty': 1.0,
-    'num_predict': 1024,
     'cache_type_k': 'q8_0',
     'cache_type_v': 'q8_0',
     'n_gpu_layers': 999,
@@ -68,12 +67,12 @@ _DEFAULT_PARAMS = {
 # Which params have enable/disable toggles
 _TOGGLED_PARAMS = {
     'ctx_size', 'temp', 'top_p', 'top_k', 'min_p',
-    'presence_penalty', 'repeat_penalty', 'num_predict',
+    'presence_penalty', 'repeat_penalty',
     'cache_type_k', 'cache_type_v', 'n_gpu_layers', 'speculative_decoding'
 }
 
 # Params affected by templates (inference settings)
-_INFERENCE_PARAMS = {'temp', 'top_p', 'top_k', 'min_p', 'presence_penalty', 'repeat_penalty', 'num_predict'}
+_INFERENCE_PARAMS = {'temp', 'top_p', 'top_k', 'min_p', 'presence_penalty', 'repeat_penalty'}
 
 # Default settings templates (include _enabled flags for each param)
 _DEFAULT_TEMPLATES = {
@@ -84,7 +83,6 @@ _DEFAULT_TEMPLATES = {
         'min_p': 0.0, 'min_p_enabled': False,
         'presence_penalty': 0.0, 'presence_penalty_enabled': False,
         'repeat_penalty': 1.0, 'repeat_penalty_enabled': True,
-        'num_predict': 1024, 'num_predict_enabled': True,
     },
     'Thinking (Coding)': {
         'temp': 0.6, 'temp_enabled': True,
@@ -93,7 +91,6 @@ _DEFAULT_TEMPLATES = {
         'min_p': 0.0, 'min_p_enabled': False,
         'presence_penalty': 0.0, 'presence_penalty_enabled': False,
         'repeat_penalty': 1.0, 'repeat_penalty_enabled': True,
-        'num_predict': 1024, 'num_predict_enabled': True,
     },
     'Instruct': {
         'temp': 0.7, 'temp_enabled': True,
@@ -102,7 +99,6 @@ _DEFAULT_TEMPLATES = {
         'min_p': 0.0, 'min_p_enabled': False,
         'presence_penalty': 1.5, 'presence_penalty_enabled': True,
         'repeat_penalty': 1.0, 'repeat_penalty_enabled': True,
-        'num_predict': 1024, 'num_predict_enabled': True,
     },
 }
 
@@ -194,7 +190,7 @@ def get_model_params(path: str) -> dict:
             val = int(val)
         elif key in ('temp', 'top_p', 'min_p', 'presence_penalty', 'repeat_penalty'):
             val = float(val)
-        elif key in ('top_k', 'n_gpu_layers', 'num_predict'):
+        elif key in ('top_k', 'n_gpu_layers'):
             val = int(val)
         elif key == 'speculative_decoding':
             val = bool(val)
@@ -355,8 +351,6 @@ def _generate_modelfile(model_path: str, params: dict) -> str:
         lines.append(f'PARAMETER repeat_penalty {params.get("repeat_penalty", 1.0)}')
     if params.get('presence_penalty_enabled', True):
         lines.append(f'PARAMETER presence_penalty {params.get("presence_penalty", 0.0)}')
-    if params.get('num_predict_enabled', True):
-        lines.append(f'PARAMETER num_predict {int(params.get("num_predict", 1024))}')
 
     return '\n'.join(lines)
 
@@ -405,7 +399,6 @@ def api_status():
             'min_p': v.get('min_p', 0.0),
             'presence_penalty': v.get('presence_penalty', 0.0),
             'repeat_penalty': v.get('repeat_penalty', 1.0),
-            'num_predict': v.get('num_predict', 1024),
             'cache_type_k': v.get('cache_type_k', 'q8_0'),
             'cache_type_v': v.get('cache_type_v', 'q8_0'),
             'n_gpu_layers': v.get('n_gpu_layers', 999),
@@ -464,9 +457,6 @@ def api_run_model():
     if data.get('repeat_penalty_enabled'):
         cmd.extend(['--repeat-penalty', str(float(data.get('repeat_penalty', 1.0)))])
 
-    if data.get('num_predict_enabled'):
-        cmd.extend(['--n-predict', str(int(data.get('num_predict', 1024)))])
-
     if data.get('cache_type_k_enabled'):
         cache_k = (data.get('cache_type_k') or 'q8_0')
         cmd.extend(['--cache-type-k', cache_k])
@@ -503,7 +493,7 @@ def api_run_model():
         'log_path': str(log_path),
         **{k: data[k] for k in (
             'ctx_size', 'temp', 'top_p', 'top_k', 'min_p',
-            'presence_penalty', 'repeat_penalty', 'num_predict',
+            'presence_penalty', 'repeat_penalty',
             'cache_type_k', 'cache_type_v', 'n_gpu_layers', 'speculative_decoding'
         ) if k in data},
     }

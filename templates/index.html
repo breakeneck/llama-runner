@@ -388,7 +388,7 @@ function renderTemplatesModal() {
     let html = '<div style="margin-bottom:12px;color:#565f89;font-size:0.8rem;">Templates define inference settings (temperature, top_p, etc.). Enable/disable each parameter per template. Context size and KV-cache are configured per-model.</div>';
 
     for (const [name, params] of Object.entries(templates)) {
-        const inferenceFields = ['temp', 'top_p', 'top_k', 'min_p', 'presence_penalty', 'repeat_penalty', 'num_predict'];
+        const inferenceFields = ['temp', 'top_p', 'top_k', 'min_p', 'presence_penalty', 'repeat_penalty'];
         const parts = [];
         for (const f of inferenceFields) {
             const enabled = params[`${f}_enabled`] !== false;
@@ -422,7 +422,6 @@ function addNewTemplate() {
         min_p: 0.0, min_p_enabled: false,
         presence_penalty: 0.0, presence_penalty_enabled: false,
         repeat_penalty: 1.0, repeat_penalty_enabled: true,
-        num_predict: 1024, num_predict_enabled: true,
     };
     saveTemplatesToServer();
     renderTemplatesModal();
@@ -440,7 +439,6 @@ function editTemplate(name) {
         { key: 'min_p', label: 'Min P', step: '0.05' },
         { key: 'presence_penalty', label: 'Presence Penalty', step: '0.1' },
         { key: 'repeat_penalty', label: 'Repeat Penalty', step: '0.05' },
-        { key: 'num_predict', label: 'Num Predict', step: '1' },
     ];
     let html = `<div class="template-edit-form">`;
     html += `<div style="color:#bb9af7;font-weight:bold;margin-bottom:8px;">Editing: ${name}</div>`;
@@ -475,7 +473,7 @@ function editTemplate(name) {
 }
 
 function saveTemplateEdit(name) {
-    const fields = ['temp', 'top_p', 'top_k', 'min_p', 'presence_penalty', 'repeat_penalty', 'num_predict'];
+    const fields = ['temp', 'top_p', 'top_k', 'min_p', 'presence_penalty', 'repeat_penalty'];
     const params = {};
     for (const f of fields) {
         const el = document.getElementById(`tpl-${f}`);
@@ -861,12 +859,6 @@ function generateConfigPanel(model, h, isRunning, isLoading) {
     html += `<input type="number" id="repeat_penalty-${h}" step="0.05" oninput="autoSaveConfig('${escAttr(model.path)}','${h}')">`;
     html += `</div>`;
 
-    // Num Predict
-    html += `<div class="form-group" id="fg-${h}-num_predict">`;
-    html += `<label class="toggle-label"><input type="checkbox" checked onchange="toggleField('${h}','num_predict',this.checked);autoSaveConfig('${escAttr(model.path)}','${h}')">Num Predict</label>`;
-    html += `<input type="number" id="num_predict-${h}" step="1" oninput="autoSaveConfig('${escAttr(model.path)}','${h}')">`;
-    html += `</div>`;
-
     html += `</div>`; // close config-grid
     html += `</div></div>`; // close right column and config-columns
 
@@ -952,8 +944,8 @@ async function toggleConfig(path) {
     if (panel.classList.toggle('visible')) {
         // Load params and populate
         const params = await _loadParamsForModel(path);
-        const defaults = { ctx_size: 100, temp: 0.2, top_p: 0.95, top_k: 20, min_p: 0.0, presence_penalty: 0.0, repeat_penalty: 1.0, num_predict: 1024, cache_type_k: 'q8_0', cache_type_v: 'q8_0', n_gpu_layers: 999, speculative_decoding: false };
-        const allFields = ['ctx_size', 'temp', 'top_p', 'top_k', 'min_p', 'presence_penalty', 'repeat_penalty', 'num_predict', 'cache_type_k', 'cache_type_v', 'n_gpu_layers', 'speculative_decoding'];
+        const defaults = { ctx_size: 100, temp: 0.2, top_p: 0.95, top_k: 20, min_p: 0.0, presence_penalty: 0.0, repeat_penalty: 1.0, cache_type_k: 'q8_0', cache_type_v: 'q8_0', n_gpu_layers: 999, speculative_decoding: false };
+        const allFields = ['ctx_size', 'temp', 'top_p', 'top_k', 'min_p', 'presence_penalty', 'repeat_penalty', 'cache_type_k', 'cache_type_v', 'n_gpu_layers', 'speculative_decoding'];
 
         for (const field of allFields) {
             const input = document.getElementById(`${field}-${h}`);
@@ -990,7 +982,7 @@ async function applyTemplateFromDropdown(path, h, templateName) {
     const tpl = templates[templateName];
     if (!tpl) return;
 
-    const inferenceFields = ['temp', 'top_p', 'top_k', 'min_p', 'presence_penalty', 'repeat_penalty', 'num_predict'];
+    const inferenceFields = ['temp', 'top_p', 'top_k', 'min_p', 'presence_penalty', 'repeat_penalty'];
     for (const field of inferenceFields) {
         const input = document.getElementById(`${field}-${h}`);
         const fg = document.getElementById(`fg-${h}-${field}`);
@@ -1022,7 +1014,7 @@ async function applyTemplateFromDropdown(path, h, templateName) {
 // ── Save template from config panel ───────────────────────────────────
 
 function collectInferenceParamsFromConfig(h) {
-    const inferenceFields = ['temp', 'top_p', 'top_k', 'min_p', 'presence_penalty', 'repeat_penalty', 'num_predict'];
+    const inferenceFields = ['temp', 'top_p', 'top_k', 'min_p', 'presence_penalty', 'repeat_penalty'];
     const params = {};
     for (const field of inferenceFields) {
         const input = document.getElementById(`${field}-${h}`);
@@ -1095,7 +1087,7 @@ async function saveAsNewTemplate(path, h) {
 // ── Collect config fields ──────────────────────────────────────────────
 
 function collectConfigFields(path, h) {
-    const allFields = ['ctx_size', 'temp', 'top_p', 'top_k', 'min_p', 'presence_penalty', 'repeat_penalty', 'num_predict', 'cache_type_k', 'cache_type_v', 'n_gpu_layers', 'speculative_decoding'];
+    const allFields = ['ctx_size', 'temp', 'top_p', 'top_k', 'min_p', 'presence_penalty', 'repeat_penalty', 'cache_type_k', 'cache_type_v', 'n_gpu_layers', 'speculative_decoding'];
     const result = {};
     for (const field of allFields) {
         const fg = document.getElementById(`fg-${h}-${field}`);
@@ -1111,7 +1103,7 @@ function collectConfigFields(path, h) {
                 result[field] = input.value;
             } else if (field === 'temp' || field === 'top_p' || field === 'min_p' || field === 'presence_penalty' || field === 'repeat_penalty') {
                 result[field] = parseFloat(input.value);
-            } else if (field === 'n_gpu_layers' || field === 'ctx_size' || field === 'top_k' || field === 'num_predict') {
+            } else if (field === 'n_gpu_layers' || field === 'ctx_size' || field === 'top_k') {
                 result[field] = parseInt(input.value);
             } else {
                 result[field] = input.value;
@@ -1138,7 +1130,7 @@ async function runWithSaved(path, h) {
     if (!params) { toggleConfig(path); return; }
 
     const payload = { path };
-    const allFields = ['ctx_size', 'temp', 'top_p', 'top_k', 'min_p', 'presence_penalty', 'repeat_penalty', 'num_predict', 'cache_type_k', 'cache_type_v', 'n_gpu_layers', 'speculative_decoding'];
+    const allFields = ['ctx_size', 'temp', 'top_p', 'top_k', 'min_p', 'presence_penalty', 'repeat_penalty', 'cache_type_k', 'cache_type_v', 'n_gpu_layers', 'speculative_decoding'];
     for (const field of allFields) {
         payload[`${field}_enabled`] = params[`${field}_enabled`] !== false;
         payload[field] = params[field];
@@ -1212,7 +1204,7 @@ async function restartModel(path, h) {
     if (!params) return;
 
     const payload = { path };
-    const allFields = ['ctx_size', 'temp', 'top_p', 'top_k', 'min_p', 'presence_penalty', 'repeat_penalty', 'num_predict', 'cache_type_k', 'cache_type_v', 'n_gpu_layers', 'speculative_decoding'];
+    const allFields = ['ctx_size', 'temp', 'top_p', 'top_k', 'min_p', 'presence_penalty', 'repeat_penalty', 'cache_type_k', 'cache_type_v', 'n_gpu_layers', 'speculative_decoding'];
     for (const field of allFields) {
         payload[`${field}_enabled`] = params[`${field}_enabled`] !== false;
         payload[field] = params[field];
@@ -1358,7 +1350,7 @@ async function stopAndStopStart(stoppedPath, startPath) {
     if (!params) return;
 
     const payload = { path: startPath };
-    const allFields = ['ctx_size', 'temp', 'top_p', 'top_k', 'min_p', 'presence_penalty', 'repeat_penalty', 'num_predict', 'cache_type_k', 'cache_type_v', 'n_gpu_layers', 'speculative_decoding'];
+    const allFields = ['ctx_size', 'temp', 'top_p', 'top_k', 'min_p', 'presence_penalty', 'repeat_penalty', 'cache_type_k', 'cache_type_v', 'n_gpu_layers', 'speculative_decoding'];
     for (const field of allFields) {
         payload[`${field}_enabled`] = params[`${field}_enabled`] !== false;
         payload[field] = params[field];
