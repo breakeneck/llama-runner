@@ -809,15 +809,19 @@ function generateConfigPanel(model, h, isRunning, isLoading) {
     html += `<div class="config-column">`;
     html += `<div class="config-column-title">Inference Settings</div>`;
 
-    // Template dropdown
+    // Template dropdown with save buttons
     html += `<div class="template-select-group">`;
     html += `<label>Template</label>`;
-    html += `<select id="template-${h}" onchange="applyTemplateFromDropdown('${escAttr(model.path)}','${h}',this.value)">`;
+    html += `<div style="display:flex;gap:4px;align-items:center;">`;
+    html += `<select id="template-${h}" onchange="applyTemplateFromDropdown('${escAttr(model.path)}','${h}',this.value)" style="flex:1;">`;
     html += `<option value="">Custom</option>`;
     for (const tname of Object.keys(templates)) {
         html += `<option value="${escAttr(tname)}">${tname}</option>`;
     }
-    html += `</select></div>`;
+    html += `</select>`;
+    html += `<button class="btn btn-small btn-warning" onclick="overrideTemplate('${escAttr(model.path)}','${h}')" title="Save current params to selected template" style="font-size:0.65rem;padding:2px 6px;">💾</button>`;
+    html += `<button class="btn btn-small btn-success" onclick="saveAsNewTemplate('${escAttr(model.path)}','${h}')" title="Save current params as new template" style="font-size:0.65rem;padding:2px 6px;">+ New</button>`;
+    html += `</div></div>`;
 
     html += `<div class="config-grid">`;
 
@@ -1013,6 +1017,79 @@ async function applyTemplateFromDropdown(path, h, templateName) {
         msgEl.innerHTML = `<span style="color:#bb9af7;font-size:0.7rem;">template: ${templateName}</span>`;
         setTimeout(() => { if (msgEl) msgEl.innerHTML = ''; }, 2000);
     }
+}
+
+// ── Save template from config panel ───────────────────────────────────
+
+function collectInferenceParamsFromConfig(h) {
+    const inferenceFields = ['temp', 'top_p', 'top_k', 'min_p', 'presence_penalty', 'repeat_penalty', 'num_predict'];
+    const params = {};
+    for (const field of inferenceFields) {
+        const input = document.getElementById(`${field}-${h}`);
+        const fg = document.getElementById(`fg-${h}-${field}`);
+        const cb = fg ? fg.querySelector('input[type="checkbox"]') : null;
+        if (input) {
+            if (input.tagName === 'SELECT') {
+                params[field] = input.value;
+            } else {
+                params[field] = parseFloat(input.value) || 0;
+            }
+        }
+        params[`${field}_enabled`] = cb ? cb.checked : true;
+    }
+    return params;
+}
+
+async function overrideTemplate(path, h) {
+    const templateSelect = document.getElementById(`template-${h}`);
+    const templateName = templateSelect ? templateSelect.value : '';
+    if (!templateName) {
+        showToast('Select a template first to override it', 'error');
+        return;
+    }
+    if (!templates[templateName]) {
+        showToast(`Template "${templateName}" not found`, 'error');
+        return;
+    }
+    if (!confirm(`Override template "${templateName}" with current settings?`)) return;
+
+    const params = collectInferenceParamsFromConfig(h);
+    templates[templateName] = params;
+    await saveTemplatesToServer();
+    showToast(`Template "${templateName}" updated`, 'success');
+    renderModels();  // re-render to update template dropdowns
+}
+
+async function saveAsNewTemplate(path, h) {
+    const name = prompt('New template name:');
+    if (!name) return;
+    if (templates[name]) {
+        if (!confirm(`Template "${name}" already exists. Override it?`)) return;
+    }
+
+    const params = collectInferenceParamsFromConfig(h);
+    templates[name] = params;
+    await saveTemplatesToServer();
+
+    // Update the template dropdown to select the new template
+    const templateSelect = document.getElementById(`template-${h}`);
+    if (templateSelect) {
+        // Rebuild options
+        templateSelect.innerHTML = '<option value="">Custom</option>';
+        for (const tname of Object.keys(templates)) {
+            const opt = document.createElement('option');
+            opt.value = tname;
+            opt.textContent = tname;
+            if (tname === name) opt.selected = true;
+            templateSelect.appendChild(opt);
+        }
+    }
+
+    // Also save template name with model params
+    await _saveParamsForModel(path, { ...params, template: name });
+
+    showToast(`Template "${name}" saved`, 'success');
+    renderModels();  // re-render to update all template dropdowns
 }
 
 // ── Collect config fields ──────────────────────────────────────────────
