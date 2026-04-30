@@ -5,3 +5,5 @@ ollama/
 model_params.json
 run_history.json
 settings_templates.json
+results/
+results.json
