@@ -1,0 +1,9 @@
+Write a standalone Python script that creates a clasic 90s demo-scene 'fire' effect in the terminal.
+Use a cellular automata algorithm where a bottom random row of 'heat' values is propagated upwards with a slight horizontal and vertical decay.
+Map the heat values to a color gradient from white to dark red based on heat value.
+Use the 6x6x6 cube colors from ANSI only.
+Also use different characters (with different visual intensities) for different heat intensities.
+Make sure program detects the current terminal width and height automatically.
+Pause for 100ms between each frame.
+Make sure CTRL+C exits the program.
+Do not test it by yourself, because when you try - there are a lot of context going and terminal just hangs.

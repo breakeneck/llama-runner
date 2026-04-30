@@ -469,6 +469,10 @@ def main():
         '--kvcache', type=str, default=None,
         help=f'KV-cache quantization type. Options: {", ".join(KV_CACHE_OPTIONS)}',
     )
+    parser.add_argument(
+        '--task', type=str, default=None,
+        help='Comma-separated list of task numbers to run (e.g., "1,3")',
+    )
     args = parser.parse_args()
 
     # ── Validate kvcache ─────────────────────────────────────────────────
@@ -532,7 +536,22 @@ def main():
     if not tasks:
         print("❌ No tasks found in ./tasks/")
         sys.exit(1)
-    print(f"📋 Found {len(tasks)} tasks: {[t['filename'] for t in tasks]}")
+
+    # ── Filter tasks if --task specified ─────────────────────────────────
+    if args.task:
+        selected_tasks = [n.strip() for n in args.task.split(',')]
+        filtered = []
+        for t in tasks:
+            if str(t['num']) in selected_tasks:
+                filtered.append(t)
+        if not filtered:
+            print(f"❌ No tasks matched filter: {args.task}")
+            print(f"   Available: {[t['num'] for t in tasks]}")
+            sys.exit(1)
+        tasks = filtered
+        print(f"📋 Filtered to {len(tasks)} task(s) matching: {args.task}")
+    else:
+        print(f"📋 Found {len(tasks)} tasks: {[t['filename'] for t in tasks]}")
 
     # ── Load existing results (resume support) ───────────────────────────
     results_data = load_results()

@@ -6,6 +6,7 @@
 # Usage:
 #   ./test.sh                              # Run all temperature configs
 #   ./test.sh --temperature 0.2,0.6        # Run only specific temperatures
+#   ./test.sh --task 3                     # Run only specific task(s)
 # ─────────────────────────────────────────────────────────────────────────
 
 set -e
