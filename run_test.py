@@ -36,6 +36,9 @@ LLAMA_SERVER_URL = f'http://{HOST}:{MODEL_PORT}'
 
 CTX_SIZE = 60  # 60k context
 
+# KV-cache quantization options
+KV_CACHE_OPTIONS = ['q8_0', 'q4_0', 'turbo4', 'tbqx3', 'turbo3']
+
 # Temperature configurations (params sent per-request via OpenAI API)
 TEMP_CONFIGS = {
     0.2: {
@@ -215,8 +218,10 @@ def get_running_model():
     return None
 
 
-def start_model(model_path):
+def start_model(model_path, kvcache=None):
     """Start a model via llama-runner API with ctx_size=60k."""
+    cache_k = kvcache if kvcache else 'q8_0'
+    cache_v = kvcache if kvcache else 'q8_0'
     data = {
         'path': model_path,
         'ctx_size': CTX_SIZE,
@@ -229,9 +234,9 @@ def start_model(model_path):
         'presence_penalty_enabled': False,
         'repeat_penalty_enabled': False,
         # KV cache quantization
-        'cache_type_k': 'q8_0',
+        'cache_type_k': cache_k,
         'cache_type_k_enabled': True,
-        'cache_type_v': 'q8_0',
+        'cache_type_v': cache_v,
         'cache_type_v_enabled': True,
         # GPU layers
         'n_gpu_layers': 999,
@@ -456,7 +461,20 @@ def main():
         '--temperature', type=str, default=None,
         help='Comma-separated list of temperatures to test (e.g., "0.2,0.6")',
     )
+    parser.add_argument(
+        '--model', type=str, default=None,
+        help='Comma-separated list of model names (or substrings) to test',
+    )
+    parser.add_argument(
+        '--kvcache', type=str, default=None,
+        help=f'KV-cache quantization type. Options: {", ".join(KV_CACHE_OPTIONS)}',
+    )
     args = parser.parse_args()
+
+    # ── Validate kvcache ─────────────────────────────────────────────────
+    if args.kvcache and args.kvcache not in KV_CACHE_OPTIONS:
+        print(f"❌ Unknown kvcache: {args.kvcache}. Available: {KV_CACHE_OPTIONS}")
+        sys.exit(1)
 
     # ── Determine which temperatures to test ─────────────────────────────
     if args.temperature:
@@ -489,7 +507,25 @@ def main():
     if not models:
         print("❌ No models found!")
         sys.exit(1)
-    print(f"📋 Found {len(models)} models")
+
+    # ── Filter models if --model specified ───────────────────────────────
+    if args.model:
+        selected_names = [n.strip().lower() for n in args.model.split(',')]
+        filtered = []
+        for m in models:
+            mname_lower = m['name'].lower()
+            for sel in selected_names:
+                if sel in mname_lower:
+                    filtered.append(m)
+                    break
+        if not filtered:
+            print(f"❌ No models matched filter: {args.model}")
+            print(f"   Available: {[m['name'] for m in models]}")
+            sys.exit(1)
+        models = filtered
+        print(f"📋 Filtered to {len(models)} model(s) matching: {args.model}")
+    else:
+        print(f"📋 Found {len(models)} models")
 
     # ── Get tasks ────────────────────────────────────────────────────────
     tasks = get_tasks()
@@ -581,7 +617,7 @@ def main():
 
             # ── Start new model ──────────────────────────────────────────
             print(f"🔄 Loading model...")
-            start_result = start_model(model_path)
+            start_result = start_model(model_path, kvcache=args.kvcache)
 
             if not start_result.get('ok'):
                 error = start_result.get('error', 'Unknown error')

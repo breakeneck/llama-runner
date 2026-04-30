@@ -778,20 +778,22 @@ function generateConfigPanel(model, h, isRunning, isLoading) {
         html += `<div class="form-group" id="fg-${h}-cache_type_k">`;
         html += `<label class="toggle-label"><input type="checkbox" onchange="toggleField('${h}','cache_type_k',this.checked);autoSaveConfig('${escAttr(model.path)}','${h}')">Cache K Quant</label>`;
         html += `<select id="cache_type_k-${h}" onchange="autoSaveConfig('${escAttr(model.path)}','${h}')">`;
-        html += `<option value="q8_0">q8 (Best)</option>`;
-        html += `<option value="q4_0">q4</option>`;
-        html += `<option value="q4_1">q4_1</option>`;
-        html += `<option value="turbo">Turbo</option>`;
+        html += `<option value="q8_0">q8_0 — Transparent (~2.0x)</option>`;
+        html += `<option value="q4_0">q4_0 — Sweet Spot (~3.8x)</option>`;
+        html += `<option value="turbo4">turbo4 — Premium Turbo (~3.8x)</option>`;
+        html += `<option value="tbqx3">tbqx3 — Latest polar derotation (~4.4x)</option>`;
+        html += `<option value="turbo3">turbo3 — Efficient 200k+ (~4.9x)</option>`;
         html += `</select></div>`;
 
         // Cache type V (dropdown)
         html += `<div class="form-group" id="fg-${h}-cache_type_v">`;
         html += `<label class="toggle-label"><input type="checkbox" onchange="toggleField('${h}','cache_type_v',this.checked);autoSaveConfig('${escAttr(model.path)}','${h}')">Cache V Quant</label>`;
         html += `<select id="cache_type_v-${h}" onchange="autoSaveConfig('${escAttr(model.path)}','${h}')">`;
-        html += `<option value="q8_0">q8 (Best)</option>`;
-        html += `<option value="q4_0">q4</option>`;
-        html += `<option value="q4_1">q4_1</option>`;
-        html += `<option value="turbo">Turbo</option>`;
+        html += `<option value="q8_0">q8_0 — Transparent (~2.0x)</option>`;
+        html += `<option value="q4_0">q4_0 — Sweet Spot (~3.8x)</option>`;
+        html += `<option value="turbo4">turbo4 — Premium Turbo (~3.8x)</option>`;
+        html += `<option value="tbqx3">tbqx3 — Latest polar derotation (~4.4x)</option>`;
+        html += `<option value="turbo3">turbo3 — Efficient 200k+ (~4.9x)</option>`;
         html += `</select></div>`;
 
         // GPU Layers

@@ -103,7 +103,7 @@ _DEFAULT_TEMPLATES = {
 }
 
 # KV-cache quantization options
-_KV_QUANT_OPTIONS = ['q8_0', 'q4_0', 'q4_1', 'turbo']
+_KV_QUANT_OPTIONS = ['q8_0', 'q4_0', 'turbo4', 'tbqx3', 'turbo3']
 
 
 # ── Load/Save helpers ──────────────────────────────────────────────────
