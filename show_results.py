@@ -75,7 +75,7 @@ def main():
     failed = [r for r in results if r.get('status') != 'success']
 
     # ── Detailed Results Table ────────────────────────────────────────────
-    headers = ['Model', 'Task', 'Temp', 'Tok/s', 'Comp Tokens', 'Total Time', 'Status']
+    headers = ['Model', 'Task', 'Temp', 'Tok/s', 'Comp Tokens', 'Total Time', 'Tool', 'Status']
 
     rows = []
     for r in results:
@@ -90,14 +90,16 @@ def main():
             tok_sec = f"{r.get('tokens_per_sec', 0):.2f}"
             comp_tokens = str(r.get('completion_tokens', 0))
             total_time = f"{r.get('total_time', 0):.1f}s"
+            tool = '🔧' if r.get('used_tool_call') else '📝'
             status = colorize('✅', GREEN)
         else:
             tok_sec = '-'
             comp_tokens = '-'
             total_time = f"{r.get('total_time', 0):.1f}s" if r.get('total_time') else '-'
+            tool = '-'
             status = colorize('❌', RED)
 
-        rows.append([model, task, temp, tok_sec, comp_tokens, total_time, status])
+        rows.append([model, task, temp, tok_sec, comp_tokens, total_time, tool, status])
 
     print_table(headers, rows, title="📊 Detailed Results")
 

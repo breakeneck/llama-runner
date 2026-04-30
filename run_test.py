@@ -69,6 +69,51 @@ MODEL_LOAD_TIMEOUT = 600  # seconds to wait for model to load
 COMPLETION_TIMEOUT = 600  # seconds per completion request
 COOLDOWN_AFTER_STOP = 5  # seconds to wait after stopping a model
 
+# Tool definition for forcing clean output via function calling.
+# The model is asked to call save_file() with the generated content,
+# which avoids markdown wrapping and explanatory text.
+SAVE_FILE_TOOL = {
+    "type": "function",
+    "function": {
+        "name": "save_file",
+        "description": (
+            "Save the generated content to a file. "
+            "Call this function with the complete file content you generated."
+        ),
+        "parameters": {
+            "type": "object",
+            "properties": {
+                "content": {
+                    "type": "string",
+                    "description": "The complete file content (e.g., the full SVG or HTML code)",
+                },
+            },
+            "required": ["content"],
+        },
+    },
+}
+
+# System messages per format — used as fallback when tool calling is unavailable
+SYSTEM_MESSAGES = {
+    'svg': (
+        'You must output ONLY the raw SVG code. '
+        'Do NOT wrap it in markdown code blocks (no ```svg). '
+        'Do NOT add any explanations, introductory text, or commentary. '
+        'Start your response with <svg and end with </svg>.'
+    ),
+    'html': (
+        'You must output ONLY the raw HTML code. '
+        'Do NOT wrap it in markdown code blocks (no ```html). '
+        'Do NOT add any explanations, introductory text, or commentary. '
+        'Start your response with <!DOCTYPE html> or <html and end with </html>.'
+    ),
+}
+DEFAULT_SYSTEM_MESSAGE = (
+    'Output ONLY the requested content. '
+    'Do NOT wrap it in markdown code blocks. '
+    'Do NOT add any explanations or commentary.'
+)
+
 
 # ── Helper Functions ─────────────────────────────────────────────────────
 
@@ -94,6 +139,50 @@ def sanitize_model_name(name):
 def result_key(model_name, task_num, temp):
     """Generate a unique key for a test result."""
     return f"{model_name}|{task_num}|{temp}"
+
+
+def extract_content(raw_content, task_format):
+    """Extract clean content from model response.
+
+    Strips markdown code blocks and explanatory text, returning only
+    the raw SVG/HTML/etc. content.
+    """
+    content = raw_content.strip()
+
+    # Step 1: Try to extract from markdown code blocks (```format\n...\n```)
+    # Match ```svg, ```html, ```xml, or plain ```
+    code_block_pattern = re.compile(
+        r'```(?:' + re.escape(task_format) + r'|xml)?\s*\n(.*?)```',
+        re.DOTALL,
+    )
+    match = code_block_pattern.search(content)
+    if match:
+        return match.group(1).strip()
+
+    # Step 2: Extract by finding the main structural tag
+    if task_format == 'svg':
+        # Find <svg ...> ... </svg>
+        match = re.search(r'(<svg\b.*?</svg>)', content, re.DOTALL)
+        if match:
+            return match.group(1)
+
+    elif task_format == 'html':
+        # Find <!DOCTYPE html> ... </html> or <html ...> ... </html>
+        match = re.search(
+            r'(<!DOCTYPE\s+html\b.*?</html>)', content,
+            re.DOTALL | re.IGNORECASE,
+        )
+        if match:
+            return match.group(1)
+        match = re.search(
+            r'(<html\b.*?</html>)', content,
+            re.DOTALL | re.IGNORECASE,
+        )
+        if match:
+            return match.group(1)
+
+    # Step 3: No patterns matched — return as-is
+    return content
 
 
 # ── API Functions ────────────────────────────────────────────────────────
@@ -192,12 +281,23 @@ def wait_for_model_ready(max_wait=MODEL_LOAD_TIMEOUT):
     return False
 
 
-def send_completion(prompt, temp, temp_config):
+def send_completion(prompt, temp, temp_config, task_format=None):
     """Send a completion request and measure performance.
+
+    Uses tool calling (save_file function) to force the model to output
+    clean content without markdown wrapping or explanatory text.
+    Falls back to system prompt + post-processing if tool calling fails.
 
     Returns (result_dict, elapsed_time). result_dict is None on failure.
     """
-    messages = [{'role': 'user', 'content': prompt}]
+    # Build messages with system prompt
+    system_msg = SYSTEM_MESSAGES.get(
+        task_format, DEFAULT_SYSTEM_MESSAGE
+    ) if task_format else DEFAULT_SYSTEM_MESSAGE
+    messages = [
+        {'role': 'system', 'content': system_msg},
+        {'role': 'user', 'content': prompt},
+    ]
     params = {
         'messages': messages,
         'stream': False,
@@ -205,6 +305,14 @@ def send_completion(prompt, temp, temp_config):
         'temperature': temp,
         **temp_config,
     }
+
+    # Use tool calling to force clean output via save_file function
+    if task_format:
+        params['tools'] = [SAVE_FILE_TOOL]
+        params['tool_choice'] = {
+            "type": "function",
+            "function": {"name": "save_file"},
+        }
 
     start_time = time.time()
     try:
@@ -244,13 +352,38 @@ def send_completion(prompt, temp, temp_config):
             ) if elapsed > 0 else 0
 
         # Extract the response content
-        content = ''
+        raw_content = ''
+        tool_content = None
         choices = data.get('choices', [])
         if choices:
-            content = choices[0].get('message', {}).get('content', '')
+            message = choices[0].get('message', {})
+            raw_content = message.get('content', '') or ''
+
+            # Try to extract content from tool calls (primary method)
+            tool_calls = message.get('tool_calls', [])
+            if tool_calls:
+                for tc in tool_calls:
+                    func = tc.get('function', {})
+                    if func.get('name') == 'save_file':
+                        try:
+                            args = json.loads(func.get('arguments', '{}'))
+                            tool_content = args.get('content', '')
+                        except json.JSONDecodeError:
+                            pass
+                        break
+
+        # Use tool content if available, otherwise extract from raw content
+        if tool_content:
+            content = tool_content
+        elif task_format:
+            content = extract_content(raw_content, task_format)
+        else:
+            content = raw_content
 
         return {
             'content': content,
+            'raw_content': raw_content,
+            'used_tool_call': tool_content is not None,
             'prompt_tokens': prompt_tokens,
             'completion_tokens': completion_tokens,
             'total_tokens': prompt_tokens + completion_tokens,
@@ -534,7 +667,7 @@ def main():
                       f"Task {task['num']}-{task['format']} | Temp {temp_str}")
 
                 # ── Send completion request ───────────────────────────────
-                result, elapsed = send_completion(task['prompt'], temp, temp_config)
+                result, elapsed = send_completion(task['prompt'], temp, temp_config, task['format'])
 
                 if result is None:
                     print(f"❌ Completion failed after {format_duration(elapsed)}")
@@ -569,13 +702,15 @@ def main():
                         'total_tokens': result['total_tokens'],
                         'total_time': result['total_time'],
                         'tokens_per_sec': result['tokens_per_sec'],
+                        'used_tool_call': result.get('used_tool_call', False),
                         'result_file': str(result_file.relative_to(SCRIPT_DIR)),
                         'timestamp': time.time(),
                     }
 
+                    tool_indicator = '🔧' if result.get('used_tool_call') else '📝'
                     print(f"✅ {result['completion_tokens']} tokens | "
                           f"{result['tokens_per_sec']} tok/s | "
-                          f"{format_duration(result['total_time'])}")
+                          f"{format_duration(result['total_time'])} | {tool_indicator}")
 
                 # ── Save result to JSON ───────────────────────────────────
                 existing_results.append(result_entry)
