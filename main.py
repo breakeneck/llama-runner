@@ -186,6 +186,8 @@ def get_model_params(path: str) -> dict:
     result = {}
     for key, default in _DEFAULT_PARAMS.items():
         val = saved.get(key, default)
+        if val is None:
+            val = default
         if key == 'ctx_size':
             val = int(val)
         elif key in ('temp', 'top_p', 'min_p', 'presence_penalty', 'repeat_penalty'):
