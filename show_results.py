@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 """Display benchmark results from results.json in formatted tables."""
 
+import argparse
 import json
 import sys
 from pathlib import Path
@@ -56,14 +57,25 @@ def print_table(headers, rows, title=None):
 
 
 def main():
-    if not RESULTS_JSON.exists():
+    parser = argparse.ArgumentParser(description='Display benchmark results')
+    parser.add_argument('--quant', type=str, default=None, help='Show results for specific KV-cache quantization (e.g., q4_0, turbo4)')
+    args = parser.parse_args()
+
+    results_path = RESULTS_JSON
+    if args.quant:
+        results_path = Path(__file__).parent / f'results_{args.quant}.json'
+        if not results_path.exists():
+            print(f"❌ No results_{args.quant}.json found. Run ./test.sh --kvcache {args.quant} first.")
+            sys.exit(1)
+
+    if not results_path.exists():
         print("❌ No results.json found. Run ./test.sh first.")
         sys.exit(1)
 
     try:
-        data = json.loads(RESULTS_JSON.read_text())
+        data = json.loads(results_path.read_text())
     except json.JSONDecodeError:
-        print("❌ results.json is corrupted.")
+        print(f"❌ {results_path.name} is corrupted.")
         sys.exit(1)
 
     results = data.get('results', [])
@@ -103,23 +115,28 @@ def main():
 
     print_table(headers, rows, title="📊 Detailed Results")
 
-    # ── Summary ───────────────────────────────────────────────────────────
-    print(f"\n{colorize('📊 Summary', BOLD)}")
-    print(f"   Total iterations:  {len(results)}")
-    print(f"   Successful:        {colorize(str(len(successful)), GREEN)}")
-    print(f"   Failed:            {colorize(str(len(failed)), RED)}")
-
+    # ── Averages Table ────────────────────────────────────────────────────
     if successful:
         avg_tok_sec = sum(r['tokens_per_sec'] for r in successful) / len(successful)
         avg_time = sum(r['total_time'] for r in successful) / len(successful)
         avg_comp_tokens = sum(r['completion_tokens'] for r in successful) / len(successful)
         avg_total_tokens = sum(r['total_tokens'] for r in successful) / len(successful)
 
-        print(f"\n   {colorize('Averages (successful only):', CYAN)}")
-        print(f"   Tokens/sec:        {avg_tok_sec:.2f}")
-        print(f"   Completion tokens: {avg_comp_tokens:.0f}")
-        print(f"   Total tokens:      {avg_total_tokens:.0f}")
-        print(f"   Total time:        {avg_time:.1f}s")
+        avg_headers = ['Avg Tok/s', 'Avg Time', 'Avg Comp Tokens', 'Avg Total Tokens', 'Iterations']
+        avg_rows = [[
+            f"{avg_tok_sec:.2f}",
+            f"{avg_time:.1f}s",
+            f"{avg_comp_tokens:.0f}",
+            f"{avg_total_tokens:.0f}",
+            str(len(successful)),
+        ]]
+        print_table(avg_headers, avg_rows, title="📊 Averages")
+
+    # ── Summary ───────────────────────────────────────────────────────────
+    print(f"\n{colorize('📊 Summary', BOLD)}")
+    print(f"   Total iterations:  {len(results)}")
+    print(f"   Successful:        {colorize(str(len(successful)), GREEN)}")
+    print(f"   Failed:            {colorize(str(len(failed)), RED)}")
 
     # ── Per-Model Averages ────────────────────────────────────────────────
     if successful:

@@ -906,6 +906,19 @@ def api_results():
     return jsonify(data)
 
 
+@app.route('/api/results/<kvcache>')
+def api_results_kvcache(kvcache):
+    """Return benchmark results for a specific KV-cache quantization."""
+    path = Path(__file__).parent / f'results_{kvcache}.json'
+    if not path.exists():
+        return jsonify({'results': [], 'metadata': {}})
+    try:
+        data = json.loads(path.read_text())
+    except (json.JSONDecodeError, OSError):
+        return jsonify({'results': [], 'metadata': {}})
+    return jsonify(data)
+
+
 @app.route('/results/<path:path>')
 def serve_result_file(path):
     """Serve individual result files from the results directory."""

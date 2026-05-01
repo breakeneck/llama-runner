@@ -41,6 +41,9 @@ KV_CACHE_OPTIONS = ['q8_0', 'q4_0', 'turbo4', 'tbqx3', 'turbo3']
 
 # Temperature configurations (params sent per-request via OpenAI API)
 TEMP_CONFIGS = {
+    0.0: {
+        # temperature only, no additional params
+    },
     0.2: {
         # temperature only, no additional params
     },
@@ -139,9 +142,10 @@ def sanitize_model_name(name):
     return re.sub(r'[/\\:*?"<>|]', '-', name)
 
 
-def result_key(model_name, task_num, temp):
+def result_key(model_name, task_num, temp, kvcache=None):
     """Generate a unique key for a test result."""
-    return f"{model_name}|{task_num}|{temp}"
+    cache_suffix = f"|{kvcache}" if kvcache else ""
+    return f"{model_name}|{task_num}|{temp}{cache_suffix}"
 
 
 def extract_content(raw_content, task_format):
@@ -440,14 +444,15 @@ def get_tasks():
 
 # ── Results Functions ────────────────────────────────────────────────────
 
-def load_results():
-    """Load existing results from results.json.
+def load_results(results_path=None):
+    """Load existing results from results.json (or given path).
 
     Returns empty structure if file doesn't exist or is blank.
     """
-    if RESULTS_JSON.exists():
+    path = results_path or RESULTS_JSON
+    if path.exists():
         try:
-            content = RESULTS_JSON.read_text().strip()
+            content = path.read_text().strip()
             if content:
                 return json.loads(content)
         except (json.JSONDecodeError, OSError):
@@ -455,9 +460,10 @@ def load_results():
     return {'results': [], 'metadata': {}}
 
 
-def save_results(results_data):
-    """Save results to results.json."""
-    RESULTS_JSON.write_text(json.dumps(results_data, indent=2))
+def save_results(results_data, results_path=None):
+    """Save results to results.json (or given path)."""
+    path = results_path or RESULTS_JSON
+    path.write_text(json.dumps(results_data, indent=2))
 
 
 # ── Main ─────────────────────────────────────────────────────────────────
@@ -562,11 +568,16 @@ def main():
     else:
         print(f"📋 Found {len(tasks)} tasks: {[t['filename'] for t in tasks]}")
 
+    # ── Determine results file (quant suffix for kvcache runs) ───────────
+    results_path = RESULTS_JSON
+    if args.kvcache:
+        results_path = SCRIPT_DIR / f'results_{args.kvcache}.json'
+
     # ── Load existing results (resume support) ───────────────────────────
-    results_data = load_results()
+    results_data = load_results(results_path)
     existing_results = results_data.get('results', [])
     completed_keys = {
-        result_key(r['model'], r['task'], r['temperature'])
+        result_key(r['model'], r['task'], r['temperature'], r.get('kvcache'))
         for r in existing_results
     }
 
@@ -577,7 +588,7 @@ def main():
         for model in models
         for task in tasks
         for temp in temp_configs
-        if result_key(model['name'], task['num'], temp) not in completed_keys
+        if result_key(model['name'], task['num'], temp, args.kvcache) not in completed_keys
     )
     completed_count = total_iterations - remaining_iterations
 
@@ -608,8 +619,8 @@ def main():
         print(f"\n⛔ Interrupted! Saving results...")
         # Force save and exit immediately
         results_data['results'] = existing_results
-        save_results(results_data)
-        print(f"   Results saved to {RESULTS_JSON}")
+        save_results(results_data, results_path)
+        print(f"   Results saved to {results_path}")
         sys.exit(0)
 
     signal.signal(signal.SIGINT, handle_signal)
@@ -629,7 +640,7 @@ def main():
                 (task, temp)
                 for task in tasks
                 for temp in temp_configs
-                if result_key(model_name, task['num'], temp) not in completed_keys
+                if result_key(model_name, task['num'], temp, args.kvcache) not in completed_keys
             ]
 
             if not model_remaining:
@@ -658,7 +669,7 @@ def main():
 
                 # Record failure for all remaining iterations
                 for task, temp in model_remaining:
-                    key = result_key(model_name, task['num'], temp)
+                    key = result_key(model_name, task['num'], temp, args.kvcache)
                     if key not in completed_keys:
                         result_entry = {
                             'model': model_name,
@@ -667,6 +678,7 @@ def main():
                             'task_format': task['format'],
                             'temperature': temp,
                             'temp_config': {'temperature': temp, **temp_configs[temp]},
+                            'kvcache': args.kvcache,
                             'status': 'model_failed',
                             'error': error,
                             'timestamp': time.time(),
@@ -675,7 +687,7 @@ def main():
                         completed_keys.add(key)
 
                 results_data['results'] = existing_results
-                save_results(results_data)
+                save_results(results_data, results_path)
                 completed_count += len(model_remaining)
                 continue
 
@@ -688,7 +700,7 @@ def main():
 
                 # Record failure for all remaining iterations
                 for task, temp in model_remaining:
-                    key = result_key(model_name, task['num'], temp)
+                    key = result_key(model_name, task['num'], temp, args.kvcache)
                     if key not in completed_keys:
                         result_entry = {
                             'model': model_name,
@@ -697,6 +709,7 @@ def main():
                             'task_format': task['format'],
                             'temperature': temp,
                             'temp_config': {'temperature': temp, **temp_configs[temp]},
+                            'kvcache': args.kvcache,
                             'status': 'timeout',
                             'error': 'Model failed to become ready',
                             'timestamp': time.time(),
@@ -705,7 +718,7 @@ def main():
                         completed_keys.add(key)
 
                 results_data['results'] = existing_results
-                save_results(results_data)
+                save_results(results_data, results_path)
                 completed_count += len(model_remaining)
 
                 # Try to stop the failed model
@@ -717,7 +730,10 @@ def main():
             print(f"\n✅ Model ready!")
 
             # ── Create model results directory ────────────────────────────
-            model_results_dir = RESULTS_DIR / safe_name
+            if args.kvcache:
+                model_results_dir = RESULTS_DIR / f"{safe_name}-{args.kvcache}"
+            else:
+                model_results_dir = RESULTS_DIR / safe_name
             model_results_dir.mkdir(exist_ok=True, parents=True)
 
             # ── Run tasks ────────────────────────────────────────────────
@@ -727,7 +743,7 @@ def main():
 
                 temp_str = str(temp)
                 temp_config = temp_configs[temp]
-                key = result_key(model_name, task['num'], temp)
+                key = result_key(model_name, task['num'], temp, args.kvcache)
 
                 if key in completed_keys:
                     continue
@@ -747,6 +763,7 @@ def main():
                         'task_format': task['format'],
                         'temperature': temp,
                         'temp_config': {'temperature': temp, **temp_config},
+                        'kvcache': args.kvcache,
                         'status': 'failed',
                         'total_time': round(elapsed, 2),
                         'timestamp': time.time(),
@@ -765,6 +782,7 @@ def main():
                         'task_format': task['format'],
                         'temperature': temp,
                         'temp_config': {'temperature': temp, **temp_config},
+                        'kvcache': args.kvcache,
                         'status': 'success',
                         'prompt_tokens': result['prompt_tokens'],
                         'completion_tokens': result['completion_tokens'],
@@ -784,7 +802,7 @@ def main():
                 # ── Save result to JSON ───────────────────────────────────
                 existing_results.append(result_entry)
                 results_data['results'] = existing_results
-                save_results(results_data)
+                save_results(results_data, results_path)
                 completed_keys.add(key)
                 completed_count += 1
 
@@ -799,7 +817,7 @@ def main():
                 models_done = sum(
                     1 for m in models
                     if all(
-                        result_key(m['name'], t['num'], tmp) in completed_keys
+                        result_key(m['name'], t['num'], tmp, args.kvcache) in completed_keys
                         for t in tasks
                         for tmp in temp_configs
                     )
@@ -831,13 +849,13 @@ def main():
 
         # Save results
         results_data['results'] = existing_results
-        save_results(results_data)
+        save_results(results_data, results_path)
 
         if interrupted:
-            print(f"\n⛔ Test interrupted. Results saved to {RESULTS_JSON}")
+            print(f"\n⛔ Test interrupted. Results saved to {results_path}")
             print(f"   Run again to continue from where you left off.")
         else:
-            print(f"\n✅ Benchmark complete! Results saved to {RESULTS_JSON}")
+            print(f"\n✅ Benchmark complete! Results saved to {results_path}")
             print(f"   Run ./results.sh to see the summary table.")
 
 

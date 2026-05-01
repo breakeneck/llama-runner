@@ -243,6 +243,7 @@
             <div class="tab-container">
                 <button class="tab-btn active" data-tab="llama" onclick="switchTab('llama')">🦙 Llama Runner</button>
                 <button class="tab-btn" data-tab="results" onclick="switchTab('results')">📊 Results</button>
+                <button class="tab-btn" data-tab="quant" onclick="switchTab('quant')">📊 Quant Results</button>
             </div>
         </div>
         <div class="header-right">
@@ -286,7 +287,13 @@
     <!-- Results Content -->
     <div id="results-content" style="display:none;">
         <div class="controls">
-            <button class="btn btn-primary" onclick="loadResults()">⟳ Refresh Results</button>
+            <button class="btn btn-primary" onclick="loadResults('default')">⟳ Refresh Results</button>
+            <select id="results-filter-task" onchange="renderResults('default')" style="background:#24283b;border:1px solid #414868;color:#c0caf5;padding:6px 10px;border-radius:6px;font-size:0.8rem;">
+                <option value="">All Tasks</option>
+            </select>
+            <select id="results-filter-temp" onchange="renderResults('default')" style="background:#24283b;border:1px solid #414868;color:#c0caf5;padding:6px 10px;border-radius:6px;font-size:0.8rem;">
+                <option value="">All Temps</option>
+            </select>
         </div>
 
         <div id="results-summary" style="margin-bottom:12px;font-size:0.85rem;color:#a9b1d6;"></div>
@@ -308,7 +315,43 @@
             <tbody id="results-list"></tbody>
         </table>
 
+        <div id="results-averages" style="margin-top:12px;"></div>
         <div id="no-results" class="no-models" style="display:none;">No results found. Run ./test.sh first.</div>
+    </div>
+
+    <!-- Quant Results Content -->
+    <div id="quant-results-content" style="display:none;">
+        <div class="controls">
+            <button class="btn btn-primary" onclick="loadResults('quant')">⟳ Refresh Quant Results</button>
+            <select id="quant-filter-task" onchange="renderResults('quant')" style="background:#24283b;border:1px solid #414868;color:#c0caf5;padding:6px 10px;border-radius:6px;font-size:0.8rem;">
+                <option value="">All Tasks</option>
+            </select>
+            <select id="quant-filter-temp" onchange="renderResults('quant')" style="background:#24283b;border:1px solid #414868;color:#c0caf5;padding:6px 10px;border-radius:6px;font-size:0.8rem;">
+                <option value="">All Temps</option>
+            </select>
+        </div>
+
+        <div id="quant-results-summary" style="margin-bottom:12px;font-size:0.85rem;color:#a9b1d6;"></div>
+
+        <table class="model-table results-table">
+            <thead>
+                <tr>
+                    <th data-sort="model" onclick="setResultsSort('model')">Model <span class="sort-arrow"></span></th>
+                    <th data-sort="task" onclick="setResultsSort('task')">Task <span class="sort-arrow"></span></th>
+                    <th data-sort="temperature" onclick="setResultsSort('temperature')">Temp <span class="sort-arrow"></span></th>
+                    <th data-sort="tokens_per_sec" onclick="setResultsSort('tokens_per_sec')">Tok/s <span class="sort-arrow"></span></th>
+                    <th data-sort="completion_tokens" onclick="setResultsSort('completion_tokens')">Comp Tokens <span class="sort-arrow"></span></th>
+                    <th data-sort="total_time" onclick="setResultsSort('total_time')">Total Time <span class="sort-arrow"></span></th>
+                    <th data-sort="used_tool_call" onclick="setResultsSort('used_tool_call')">Tool <span class="sort-arrow"></span></th>
+                    <th data-sort="status" onclick="setResultsSort('status')">Status <span class="sort-arrow"></span></th>
+                    <th>Result</th>
+                </tr>
+            </thead>
+            <tbody id="quant-results-list"></tbody>
+        </table>
+
+        <div id="quant-results-averages" style="margin-top:12px;"></div>
+        <div id="no-quant-results" class="no-models" style="display:none;">No quant results found. Run ./test.sh --kvcache first.</div>
     </div>
 
     <!-- Log Modal -->
@@ -409,7 +452,8 @@ let modelLoadStates = {};
 let _logPollTimers = new Map();
 
 // Results state
-let resultsData = [];
+let resultsDataDefault = [];
+let resultsDataQuant = [];
 let resultsSortField = 'model';
 let resultsSortDir = 1;
 
@@ -599,15 +643,23 @@ function switchTab(tab) {
 
     const llamaContent = document.getElementById('llama-content');
     const resultsContent = document.getElementById('results-content');
+    const quantResultsContent = document.getElementById('quant-results-content');
 
     if (tab === 'llama') {
         llamaContent.style.display = 'block';
         resultsContent.style.display = 'none';
+        quantResultsContent.style.display = 'none';
         renderModels();
     } else if (tab === 'results') {
         llamaContent.style.display = 'none';
         resultsContent.style.display = 'block';
-        loadResults();
+        quantResultsContent.style.display = 'none';
+        loadResults('default');
+    } else if (tab === 'quant') {
+        llamaContent.style.display = 'none';
+        resultsContent.style.display = 'none';
+        quantResultsContent.style.display = 'block';
+        loadResults('quant');
     }
 }
 
@@ -1617,16 +1669,49 @@ function formatTimeAgo(timestamp) {
     return `${Math.floor(diff / 86400)}d ago`;
 }
 
-async function loadResults() {
+async function loadResults(type) {
+    const isQuant = type === 'quant';
+    const url = isQuant ? '/api/results/quant' : '/api/results';
+    const listId = isQuant ? 'quant-results-list' : 'results-list';
     try {
-        const resp = await fetch('/api/results');
+        const resp = await fetch(url);
         const data = await resp.json();
-        resultsData = data.results || [];
-        renderResults();
+        if (isQuant) {
+            resultsDataQuant = data.results || [];
+        } else {
+            resultsDataDefault = data.results || [];
+        }
+        populateFilterDropdowns(type);
+        renderResults(type);
     } catch (e) {
         console.error('Failed to load results:', e);
-        document.getElementById('results-list').innerHTML = '<tr><td colspan="9" style="text-align:center;color:#f7768e;">Failed to load results</td></tr>';
+        document.getElementById(listId).innerHTML = '<tr><td colspan="9" style="text-align:center;color:#f7768e;">Failed to load results</td></tr>';
     }
+}
+
+function populateFilterDropdowns(type) {
+    const isQuant = type === 'quant';
+    const data = isQuant ? resultsDataQuant : resultsDataDefault;
+    const taskSelect = document.getElementById(isQuant ? 'quant-filter-task' : 'results-filter-task');
+    const tempSelect = document.getElementById(isQuant ? 'quant-filter-temp' : 'results-filter-temp');
+
+    const tasks = [...new Set(data.map(r => `${r.task || ''}-${r.task_format || ''}`))].sort();
+    const temps = [...new Set(data.map(r => r.temperature !== undefined ? String(r.temperature) : ''))].sort((a, b) => parseFloat(a) - parseFloat(b));
+
+    const currentTask = taskSelect.value;
+    const currentTemp = tempSelect.value;
+
+    taskSelect.innerHTML = '<option value="">All Tasks</option>';
+    for (const t of tasks) {
+        taskSelect.innerHTML += `<option value="${escAttr(t)}">${escAttr(t)}</option>`;
+    }
+    tempSelect.innerHTML = '<option value="">All Temps</option>';
+    for (const t of temps) {
+        tempSelect.innerHTML += `<option value="${escAttr(t)}">${escAttr(t)}</option>`;
+    }
+
+    if ([...taskSelect.options].some(o => o.value === currentTask)) taskSelect.value = currentTask;
+    if ([...tempSelect.options].some(o => o.value === currentTemp)) tempSelect.value = currentTemp;
 }
 
 function setResultsSort(field) {
@@ -1636,11 +1721,12 @@ function setResultsSort(field) {
         resultsSortField = field;
         resultsSortDir = 1;
     }
-    renderResults();
+    if (currentTab === 'results') renderResults('default');
+    else if (currentTab === 'quant') renderResults('quant');
 }
 
-function getSortedResults() {
-    const sorted = [...resultsData];
+function getSortedResultsForData(data) {
+    const sorted = [...data];
     sorted.sort((a, b) => {
         let va = a[resultsSortField];
         let vb = b[resultsSortField];
@@ -1658,6 +1744,22 @@ function getSortedResults() {
     return sorted;
 }
 
+function getFilteredAndSortedResults(type) {
+    const isQuant = type === 'quant';
+    const data = isQuant ? resultsDataQuant : resultsDataDefault;
+    const taskFilter = document.getElementById(isQuant ? 'quant-filter-task' : 'results-filter-task').value;
+    const tempFilter = document.getElementById(isQuant ? 'quant-filter-temp' : 'results-filter-temp').value;
+
+    let filtered = data;
+    if (taskFilter) {
+        filtered = filtered.filter(r => `${r.task || ''}-${r.task_format || ''}` === taskFilter);
+    }
+    if (tempFilter) {
+        filtered = filtered.filter(r => String(r.temperature) === tempFilter);
+    }
+    return getSortedResultsForData(filtered);
+}
+
 function getResultIcon(fmt) {
     if (fmt === 'svg') return '🎨';
     if (fmt === 'html') return '🌐';
@@ -1670,18 +1772,47 @@ function toggleModelGroup(groupId) {
     if (group) group.classList.toggle('collapsed');
 }
 
-function renderResults() {
-    const tbody = document.getElementById('results-list');
-    const summaryEl = document.getElementById('results-summary');
-    const noResultsEl = document.getElementById('no-results');
+function renderAverages(type, data) {
+    const isQuant = type === 'quant';
+    const containerId = isQuant ? 'quant-results-averages' : 'results-averages';
+    const container = document.getElementById(containerId);
+    const successful = data.filter(r => r.status === 'success');
+    if (successful.length === 0) {
+        container.innerHTML = '';
+        return;
+    }
 
-    const total = resultsData.length;
-    const successful = resultsData.filter(r => r.status === 'success');
-    const failed = resultsData.filter(r => r.status !== 'success');
+    const avgTokSec = successful.reduce((s, r) => s + (r.tokens_per_sec || 0), 0) / successful.length;
+    const avgTime = successful.reduce((s, r) => s + (r.total_time || 0), 0) / successful.length;
+    const avgCompTokens = successful.reduce((s, r) => s + (r.completion_tokens || 0), 0) / successful.length;
+    const avgTotalTokens = successful.reduce((s, r) => s + (r.total_tokens || 0), 0) / successful.length;
+
+    let html = '<table class="model-table" style="margin-top:8px;font-size:0.8rem;">';
+    html += '<thead><tr><th colspan="4" style="text-align:left;color:#e0af68;">📊 Averages (filtered)</th></tr></thead>';
+    html += '<tbody><tr>';
+    html += `<td style="color:#a9b1d6;">Avg Tok/s: <span style="color:#7aa2f7;font-weight:bold;">${avgTokSec.toFixed(2)}</span></td>`;
+    html += `<td style="color:#a9b1d6;">Avg Time: <span style="color:#7aa2f7;font-weight:bold;">${avgTime.toFixed(1)}s</span></td>`;
+    html += `<td style="color:#a9b1d6;">Avg Comp Tokens: <span style="color:#7aa2f7;font-weight:bold;">${avgCompTokens.toFixed(0)}</span></td>`;
+    html += `<td style="color:#a9b1d6;">Avg Total Tokens: <span style="color:#7aa2f7;font-weight:bold;">${avgTotalTokens.toFixed(0)}</span></td>`;
+    html += '</tr></tbody></table>';
+    container.innerHTML = html;
+}
+
+function renderResults(type) {
+    const isQuant = type === 'quant';
+    const tbody = document.getElementById(isQuant ? 'quant-results-list' : 'results-list');
+    const summaryEl = document.getElementById(isQuant ? 'quant-results-summary' : 'results-summary');
+    const noResultsEl = document.getElementById(isQuant ? 'no-quant-results' : 'no-results');
+    const allData = isQuant ? resultsDataQuant : resultsDataDefault;
+
+    const total = allData.length;
+    const successful = allData.filter(r => r.status === 'success');
+    const failed = allData.filter(r => r.status !== 'success');
 
     if (total === 0) {
         summaryEl.innerHTML = '';
         tbody.innerHTML = '';
+        document.getElementById(isQuant ? 'quant-results-averages' : 'results-averages').innerHTML = '';
         noResultsEl.style.display = 'block';
         return;
     }
@@ -1689,7 +1820,7 @@ function renderResults() {
     noResultsEl.style.display = 'none';
 
     // Last activity timestamp
-    const lastTs = resultsData.reduce((max, r) => Math.max(max, r.timestamp || 0), 0);
+    const lastTs = allData.reduce((max, r) => Math.max(max, r.timestamp || 0), 0);
     const lastAgo = lastTs ? ` · Last: ${formatTimeAgo(lastTs)}` : '';
 
     let summaryHtml = `<span style="color:#7aa2f7;font-weight:bold;">${total}</span> total · `;
@@ -1713,8 +1844,10 @@ function renderResults() {
         }
     });
 
+    // Get filtered & sorted data
+    const sorted = getFilteredAndSortedResults(type);
+
     // Group by model
-    const sorted = getSortedResults();
     const grouped = {};
     for (const r of sorted) {
         const m = r.model || 'Unknown';
@@ -1725,7 +1858,7 @@ function renderResults() {
     let html = '';
     let rowIdx = 0;
     for (const [modelName, rows] of Object.entries(grouped)) {
-        const groupId = 'grp-' + hashStr(modelName);
+        const groupId = 'grp-' + hashStr(modelName) + (isQuant ? '-q' : '');
         html += `<tbody class="model-group" id="${groupId}">`;
         html += `<tr class="model-group-header" onclick="toggleModelGroup('${groupId}')"><td colspan="9"><span class="group-toggle">▼</span> ${escAttr(modelName)} <span style="color:#565f89;font-size:0.75rem;">(${rows.length})</span></td></tr>`;
         for (const r of rows) {
@@ -1753,7 +1886,7 @@ function renderResults() {
             } else if (r.result_file) {
                 const fmt = r.task_format || '';
                 const icon = getResultIcon(fmt);
-                resultCell = `<button class="btn btn-small btn-primary" onclick="showResultPreview('${escAttr(r.result_file)}','${escAttr(fmt)}',${rowIdx})">${icon} View</button>`;
+                resultCell = `<button class="btn btn-small btn-primary" onclick="showResultPreview('${escAttr(r.result_file)}','${escAttr(fmt)}',${rowIdx},'${type}')">${icon} View</button>`;
             }
 
             html += `<tr class="model-row group-row" data-row-idx="${rowIdx}" data-file="${escAttr(r.result_file || '')}" data-fmt="${escAttr(r.task_format || '')}">`;
@@ -1772,6 +1905,9 @@ function renderResults() {
         html += `</tbody>`;
     }
     tbody.innerHTML = html;
+
+    // Render averages for filtered data
+    renderAverages(type, sorted);
 }
 
 // ── Result Preview Modal ───────────────────────────────────────────────
@@ -1779,11 +1915,13 @@ function renderResults() {
 let _currentPreviewFile = null;
 let _currentPreviewFormat = null;
 let _currentPreviewIdx = -1;
+let _currentPreviewType = 'default';
 
-function showResultPreview(filePath, format, rowIdx) {
+function showResultPreview(filePath, format, rowIdx, type) {
     _currentPreviewFile = filePath;
     _currentPreviewFormat = format;
     _currentPreviewIdx = rowIdx;
+    _currentPreviewType = type || 'default';
     _updatePreviewNav();
     _highlightRow(rowIdx);
 
@@ -1837,10 +1975,9 @@ function showResultPreview(filePath, format, rowIdx) {
         });
 }
 
-
-
 function _getModelIndices() {
-    const sorted = getSortedResults();
+    const data = _currentPreviewType === 'quant' ? resultsDataQuant : resultsDataDefault;
+    const sorted = getSortedResultsForData(data);
     const current = sorted[_currentPreviewIdx];
     if (!current) return { indices: [], current: 0 };
     const modelName = current.model;
@@ -1865,14 +2002,15 @@ function _highlightRow(idx) {
 }
 
 function navigatePreview(dir) {
-    const sorted = getSortedResults();
+    const data = _currentPreviewType === 'quant' ? resultsDataQuant : resultsDataDefault;
+    const sorted = getSortedResultsForData(data);
     const { indices, current } = _getModelIndices();
     const newPos = current + dir;
     if (newPos < 0 || newPos >= indices.length) return;
     const newIdx = indices[newPos];
     const r = sorted[newIdx];
     if (r.result_file) {
-        showResultPreview(r.result_file, r.task_format || '', newIdx);
+        showResultPreview(r.result_file, r.task_format || '', newIdx, _currentPreviewType);
     }
 }
 
