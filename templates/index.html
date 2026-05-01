@@ -1031,6 +1031,7 @@ function generateConfigPanel(model, h, isRunning, isLoading) {
     } else {
         html += `<button class="btn btn-success btn-small" onclick="runFromConfig('${escAttr(model.path)}', '${h}')">▶ Run</button>`;
     }
+    html += `<button class="btn btn-copy btn-small" onclick="copyRunCommand('${escAttr(model.path)}', '${h}')">📋 Copy cmd</button>`;
 
     html += `<span id="msg-${h}" style="color:#73daca;font-size:0.75rem;"></span>`;
     html += `</div>`;
@@ -1291,6 +1292,23 @@ async function runFromConfig(path, h) {
     await _saveParamsForModel(path, config);
     const payload = { path, ...config };
     doRun(path, h, payload);
+}
+
+async function copyRunCommand(path, h) {
+    const config = collectConfigFields(path, h);
+    const payload = { path, ...config };
+    try {
+        const resp = await fetch('/api/models/run-command', { method: 'POST', headers: {'Content-Type':'application/json'}, body: JSON.stringify(payload) });
+        const data = await resp.json();
+        if (data.ok && data.command) {
+            await navigator.clipboard.writeText(data.command);
+            showToast('Run command copied to clipboard', 'success');
+        } else {
+            showToast(data.error || 'Failed to build command', 'error');
+        }
+    } catch (e) {
+        showToast('Error: ' + e.message, 'error');
+    }
 }
 
 function findOtherRunningModel(currentPath) {

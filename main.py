@@ -4,6 +4,7 @@
 import json
 import os
 import re
+import shlex
 import signal
 import subprocess
 import time
@@ -411,26 +412,13 @@ def api_status():
     return jsonify({'running': info})
 
 
-@app.route('/api/models/run', methods=['POST'])
-def api_run_model():
-    """Start llama-server for a given model."""
-    data = request.get_json(force=True)
+def _build_run_command(data: dict) -> list[str]:
+    """Build the llama-server command list from request data."""
     path = data['path']
-
-    # Validate model file exists
-    if not os.path.isfile(path):
-        return jsonify({'ok': False, 'error': 'Model file not found'}), 400
-
-    # Check already running
-    _clean_dead()
-    if path in running_processes:
-        return jsonify({'ok': False, 'error': 'Already running'}), 409
-
-    # Port is global from env — ignore any per-model value
     port = MODEL_PORT
 
     cmd = [
-        'stdbuf', '-oL', '-eL',  # force line-buffered stdout/stderr for real-time log reading
+        'stdbuf', '-oL', '-eL',
         LLAMA_SERVER_CMD,
         '-m', path,
         '--flash-attn', 'on',
@@ -438,9 +426,8 @@ def api_run_model():
         '--port', str(port),
     ]
 
-    # Build flags only for enabled options
     if data.get('ctx_size_enabled'):
-        ctx_val = int(data.get('ctx_size', 100)) * 1_000   # shorthand: 10 → 10k
+        ctx_val = int(data.get('ctx_size', 100)) * 1_000
         cmd.extend(['--ctx-size', str(ctx_val)])
 
     if data.get('temp_enabled'):
@@ -462,11 +449,11 @@ def api_run_model():
         cmd.extend(['--repeat-penalty', str(float(data.get('repeat_penalty', 1.0)))])
 
     if data.get('cache_type_k_enabled'):
-        cache_k = (data.get('cache_type_k') or 'q8_0')
+        cache_k = data.get('cache_type_k') or 'q8_0'
         cmd.extend(['--cache-type-k', cache_k])
 
     if data.get('cache_type_v_enabled'):
-        cache_v = (data.get('cache_type_v') or 'q8_0')
+        cache_v = data.get('cache_type_v') or 'q8_0'
         cmd.extend(['--cache-type-v', cache_v])
 
     if data.get('n_gpu_layers_enabled'):
@@ -474,6 +461,29 @@ def api_run_model():
 
     if data.get('speculative_decoding_enabled'):
         cmd.extend(['--spec-type', 'ngram-mod', '--spec-ngram-size-n', '24', '--draft-min', '12', '--draft-max', '48'])
+
+    return cmd
+
+
+@app.route('/api/models/run', methods=['POST'])
+def api_run_model():
+    """Start llama-server for a given model."""
+    data = request.get_json(force=True)
+    path = data['path']
+
+    # Validate model file exists
+    if not os.path.isfile(path):
+        return jsonify({'ok': False, 'error': 'Model file not found'}), 400
+
+    # Check already running
+    _clean_dead()
+    if path in running_processes:
+        return jsonify({'ok': False, 'error': 'Already running'}), 409
+
+    # Port is global from env — ignore any per-model value
+    port = MODEL_PORT
+
+    cmd = _build_run_command(data)
 
     # Use a persistent log file named after the model (overwritten each run)
     log_path = _log_path_for_model(path)
@@ -506,6 +516,17 @@ def api_run_model():
     update_run_history(path, 'starting')
 
     return jsonify({'ok': True, 'pid': proc.pid, 'port': port})
+
+
+@app.route('/api/models/run-command', methods=['POST'])
+def api_run_command():
+    """Return the shell command that would be used to run a model."""
+    data = request.get_json(force=True)
+    path = data.get('path', '')
+    if not path or not os.path.isfile(path):
+        return jsonify({'ok': False, 'error': 'Model file not found'}), 400
+    cmd = _build_run_command(data)
+    return jsonify({'ok': True, 'command': shlex.join(cmd)})
 
 
 @app.route('/api/models/run-success', methods=['POST'])
