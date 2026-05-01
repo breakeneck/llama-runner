@@ -14,6 +14,8 @@ LOG_DIR = Path(__file__).parent / 'logs'
 LOG_DIR.mkdir(exist_ok=True)
 OLLAMA_DIR = Path(__file__).parent / 'ollama'
 OLLAMA_DIR.mkdir(exist_ok=True)
+RESULTS_JSON = Path(__file__).parent / 'results.json'
+RESULTS_DIR = Path(__file__).parent / 'results'
 
 
 def _log_path_for_model(model_path: str) -> Path:
@@ -23,7 +25,7 @@ def _log_path_for_model(model_path: str) -> Path:
 
 
 from dotenv import load_dotenv
-from flask import Flask, jsonify, render_template, request
+from flask import Flask, jsonify, render_template, request, send_from_directory
 
 # ── Load configuration from .env ────────────────────────────────────────
 load_dotenv()
@@ -888,6 +890,64 @@ def api_ollama_list():
         return jsonify({'models': models})
     except Exception as e:
         return jsonify({'models': [], 'error': str(e)})
+
+
+# ── Results API ────────────────────────────────────────────────────────
+
+@app.route('/api/results')
+def api_results():
+    """Return benchmark results from results.json."""
+    if not RESULTS_JSON.exists():
+        return jsonify({'results': [], 'metadata': {}})
+    try:
+        data = json.loads(RESULTS_JSON.read_text())
+    except (json.JSONDecodeError, OSError):
+        return jsonify({'results': [], 'metadata': {}})
+    return jsonify(data)
+
+
+@app.route('/results/<path:path>')
+def serve_result_file(path):
+    """Serve individual result files from the results directory."""
+    if not RESULTS_DIR.is_dir():
+        return jsonify({'error': 'Results directory not found'}), 404
+    try:
+        return send_from_directory(RESULTS_DIR, path)
+    except FileNotFoundError:
+        return jsonify({'error': 'File not found'}), 404
+
+
+@app.route('/api/run-python/<path:path>')
+def api_run_python(path):
+    """Run a Python result file and return its output."""
+    file_path = RESULTS_DIR / path
+    # Security: ensure the file is inside RESULTS_DIR
+    try:
+        resolved = file_path.resolve()
+        resolved_results = RESULTS_DIR.resolve()
+        if not str(resolved).startswith(str(resolved_results)):
+            return jsonify({'error': 'Invalid path'}), 403
+    except (OSError, ValueError):
+        return jsonify({'error': 'Invalid path'}), 403
+
+    if not file_path.is_file():
+        return jsonify({'error': 'File not found'}), 404
+
+    try:
+        result = subprocess.run(
+            ['python3', str(file_path)],
+            capture_output=True, text=True, timeout=15
+        )
+        return jsonify({
+            'ok': True,
+            'stdout': result.stdout,
+            'stderr': result.stderr,
+            'returncode': result.returncode,
+        })
+    except subprocess.TimeoutExpired:
+        return jsonify({'ok': False, 'error': 'Execution timed out (15s)'}), 408
+    except Exception as e:
+        return jsonify({'ok': False, 'error': str(e)}), 500
 
 
 # ── Entrypoint ─────────────────────────────────────────────────────────

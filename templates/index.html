@@ -199,6 +199,20 @@
             color: #9ece6a; white-space: pre-wrap; word-break: break-all;
             max-height: 400px; overflow: auto;
         }
+
+        /* Result Preview Modal */
+        #preview-modal { display:none; position:fixed; top:0;left:0;width:100%;height:100%; background:rgba(0,0,0,0.7); z-index:1000; justify-content:center; align-items:center; }
+        #preview-modal.visible { display:flex; }
+        #preview-box { background:#1a1b26; border:1px solid #414868; border-radius:8px; width:85%; max-width:900px; height:80%; display:flex; flex-direction:column; }
+        #preview-header { padding:10px 16px; background:#24283b; border-bottom:1px solid #414868; border-radius:8px 8px 0 0; display:flex; justify-content:space-between; align-items:center; color:#7aa2f7; font-weight:bold; }
+        #preview-body { flex:1; overflow:auto; padding:16px; position:relative; }
+        #preview-svg-container { display:none; width:100%; height:100%; }
+        #preview-iframe { display:none; width:100%; height:100%; border:1px solid #414868; border-radius:6px; background:#fff; }
+        #preview-python { display:none; width:100%; height:100%; display:flex; flex-direction:column; gap:8px; }
+        #preview-python-code { background:#1a1b26; border:1px solid #414868; border-radius:6px; padding:12px; font-family:'Courier New',monospace; font-size:0.8rem; color:#9ece6a; white-space:pre-wrap; word-break:break-all; overflow:auto; flex:1; }
+        #preview-python-output { background:#24283b; border:1px solid #414868; border-radius:6px; padding:12px; font-family:'Courier New',monospace; font-size:0.8rem; color:#a9b1d6; white-space:pre-wrap; word-break:break-all; overflow:auto; min-height:80px; max-height:200px; }
+        #preview-python-output.error { color:#f7768e; border-color:#f7768e; }
+        #preview-python-output.success { color:#9ece6a; border-color:#9ece6a; }
     </style>
 </head>
 <body>
@@ -208,7 +222,7 @@
         <div class="header-left">
             <div class="tab-container">
                 <button class="tab-btn active" data-tab="llama" onclick="switchTab('llama')">🦙 Llama Runner</button>
-                <button class="tab-btn" data-tab="ollama" onclick="switchTab('ollama')">🦙 Ollama Runner</button>
+                <button class="tab-btn" data-tab="results" onclick="switchTab('results')">📊 Results</button>
             </div>
         </div>
         <div class="header-right">
@@ -224,27 +238,58 @@
         <button class="notif-close" onclick="hideNotification()">×</button>
     </div>
 
-    <div class="controls">
-        <input type="text" id="search-input" placeholder="🔍 Filter models..." oninput="renderModels()">
-        <button class="btn btn-primary" onclick="refreshModels()">⟳ Refresh</button>
+    <!-- Llama Runner Content -->
+    <div id="llama-content">
+        <div class="controls">
+            <input type="text" id="search-input" placeholder="🔍 Filter models..." oninput="renderModels()">
+            <button class="btn btn-primary" onclick="refreshModels()">⟳ Refresh</button>
+        </div>
+
+        <!-- Model List -->
+        <table class="model-table">
+            <thead>
+                <tr>
+                    <th style="width:30%" data-sort="name" onclick="setSort('name')">Name <span class="sort-arrow"></span></th>
+                    <th style="width:7%" data-sort="size" onclick="setSort('size')">Size <span class="sort-arrow"></span></th>
+                    <th style="width:7%" data-sort="date" onclick="setSort('date')">Date <span class="sort-arrow"></span></th>
+                    <th style="width:8%">Context</th>
+                    <th style="width:9%" data-sort="status" onclick="setSort('status')">Status <span class="sort-arrow"></span></th>
+                    <th style="width:39%">Actions</th>
+                </tr>
+            </thead>
+            <tbody id="model-list"></tbody>
+        </table>
+
+        <div id="no-models" class="no-models" style="display:none;">No models found. Check MODEL_DIR configuration.</div>
     </div>
 
-    <!-- Model List -->
-    <table class="model-table">
-        <thead>
-            <tr>
-                <th style="width:30%" data-sort="name" onclick="setSort('name')">Name <span class="sort-arrow"></span></th>
-                <th style="width:7%" data-sort="size" onclick="setSort('size')">Size <span class="sort-arrow"></span></th>
-                <th style="width:7%" data-sort="date" onclick="setSort('date')">Date <span class="sort-arrow"></span></th>
-                <th style="width:8%">Context</th>
-                <th style="width:9%" data-sort="status" onclick="setSort('status')">Status <span class="sort-arrow"></span></th>
-                <th style="width:39%">Actions</th>
-            </tr>
-        </thead>
-        <tbody id="model-list"></tbody>
-    </table>
+    <!-- Results Content -->
+    <div id="results-content" style="display:none;">
+        <div class="controls">
+            <button class="btn btn-primary" onclick="loadResults()">⟳ Refresh Results</button>
+        </div>
 
-    <div id="no-models" class="no-models" style="display:none;">No models found. Check MODEL_DIR configuration.</div>
+        <div id="results-summary" style="margin-bottom:12px;font-size:0.85rem;color:#a9b1d6;"></div>
+
+        <table class="model-table results-table">
+            <thead>
+                <tr>
+                    <th data-sort="model" onclick="setResultsSort('model')">Model <span class="sort-arrow"></span></th>
+                    <th data-sort="task" onclick="setResultsSort('task')">Task <span class="sort-arrow"></span></th>
+                    <th data-sort="temperature" onclick="setResultsSort('temperature')">Temp <span class="sort-arrow"></span></th>
+                    <th data-sort="tokens_per_sec" onclick="setResultsSort('tokens_per_sec')">Tok/s <span class="sort-arrow"></span></th>
+                    <th data-sort="completion_tokens" onclick="setResultsSort('completion_tokens')">Comp Tokens <span class="sort-arrow"></span></th>
+                    <th data-sort="total_time" onclick="setResultsSort('total_time')">Total Time <span class="sort-arrow"></span></th>
+                    <th data-sort="used_tool_call" onclick="setResultsSort('used_tool_call')">Tool <span class="sort-arrow"></span></th>
+                    <th data-sort="status" onclick="setResultsSort('status')">Status <span class="sort-arrow"></span></th>
+                    <th>Result</th>
+                </tr>
+            </thead>
+            <tbody id="results-list"></tbody>
+        </table>
+
+        <div id="no-results" class="no-models" style="display:none;">No results found. Run ./test.sh first.</div>
+    </div>
 
     <!-- Log Modal -->
     <div id="log-modal">
@@ -257,6 +302,27 @@
                 </div>
             </div>
             <pre id="log-body"></pre>
+        </div>
+    </div>
+</div>
+
+<!-- Result Preview Modal -->
+<div id="preview-modal">
+    <div id="preview-box">
+        <div id="preview-header">
+            <span id="preview-title">📄 Result Preview</span>
+            <div>
+                <button class="btn btn-small" id="preview-run-btn" style="display:none;" onclick="runPythonPreview()">▶ Run</button>
+                <button class="btn btn-small" onclick="closePreviewModal()">×</button>
+            </div>
+        </div>
+        <div id="preview-body">
+            <div id="preview-svg-container"></div>
+            <iframe id="preview-iframe"></iframe>
+            <div id="preview-python">
+                <pre id="preview-python-code"></pre>
+                <pre id="preview-python-output" style="display:none;"></pre>
+            </div>
         </div>
     </div>
 </div>
@@ -291,22 +357,7 @@
     </div>
 </div>
 
-<!-- Modelfile Modal -->
-<div id="modelfile-modal" class="modal-overlay">
-    <div class="modal-box" style="max-width:700px;">
-        <div class="modal-header">
-            <span>📄 Ollama Modelfile</span>
-            <button class="btn btn-small" onclick="closeModelfileModal()">×</button>
-        </div>
-        <div class="modal-body">
-            <pre id="modelfile-content"></pre>
-        </div>
-        <div class="modal-footer">
-            <button class="btn btn-copy" onclick="copyModelfile()">📋 Copy</button>
-            <button class="btn btn-primary" onclick="closeModelfileModal()">Close</button>
-        </div>
-    </div>
-</div>
+
 
 <script>
 let allModels = [];
@@ -314,7 +365,7 @@ let runningModels = {};
 let savedParamsCache = {};
 let sortField = 'status';  // default sort by status
 let sortDir = -1;          // -1 = desc (running first)
-let currentTab = 'llama';  // 'llama' or 'ollama'
+let currentTab = 'llama';  // 'llama' or 'results'
 let templates = {};        // settings templates
 let vramInterval = null;
 const modelOrderMap = {};
@@ -323,6 +374,11 @@ const modelOrderMap = {};
 let modelLoadStates = {};
 // Log poll intervals for loading models
 let _logPollTimers = new Map();
+
+// Results state
+let resultsData = [];
+let resultsSortField = 'model';
+let resultsSortDir = 1;
 
 const MODEL_PORT = {{ MODEL_PORT }};
 
@@ -507,7 +563,19 @@ function switchTab(tab) {
     });
     // Close all open config panels
     document.querySelectorAll('.config-panel.visible').forEach(p => p.classList.remove('visible'));
-    renderModels();
+
+    const llamaContent = document.getElementById('llama-content');
+    const resultsContent = document.getElementById('results-content');
+
+    if (tab === 'llama') {
+        llamaContent.style.display = 'block';
+        resultsContent.style.display = 'none';
+        renderModels();
+    } else if (tab === 'results') {
+        llamaContent.style.display = 'none';
+        resultsContent.style.display = 'block';
+        loadResults();
+    }
 }
 
 // ── Persistent run states ──────────────────────────────────────────────
@@ -733,19 +801,13 @@ function renderModels() {
         // Actions column
         html += `<td style="display:flex;gap:4px;flex-wrap:wrap;">`;
         html += `<button class="btn btn-primary btn-small" onclick="toggleConfig('${escAttr(model.path)}')">⚙ Config</button>`;
-        if (currentTab === 'llama') {
-            if (isRunning) {
-                html += `<button class="btn btn-danger btn-small" onclick="stopModel('${escAttr(model.path)}')">⏹ Stop</button>`;
-                html += `<button class="btn btn-warning btn-small" onclick="restartModel('${escAttr(model.path)}', '${h}')">⟳ Restart</button>`;
-            } else if (isLoading) {
-                html += `<button class="btn btn-primary btn-small" disabled><span class="spinner"></span> Starting...</button>`;
-            } else {
-                html += `<button class="btn btn-success btn-small" onclick="runWithSaved('${escAttr(model.path)}', '${h}')">▶ Run</button>`;
-            }
+        if (isRunning) {
+            html += `<button class="btn btn-danger btn-small" onclick="stopModel('${escAttr(model.path)}')">⏹ Stop</button>`;
+            html += `<button class="btn btn-warning btn-small" onclick="restartModel('${escAttr(model.path)}', '${h}')">⟳ Restart</button>`;
+        } else if (isLoading) {
+            html += `<button class="btn btn-primary btn-small" disabled><span class="spinner"></span> Starting...</button>`;
         } else {
-            // Ollama tab buttons
-            html += `<button class="btn btn-ollama btn-small" onclick="createOllamaModelfile('${escAttr(model.path)}', '${h}')">🦙 Create Modelfile</button>`;
-            html += `<button class="btn btn-primary btn-small" onclick="viewModelfile('${escAttr(model.path)}')">📄 View</button>`;
+            html += `<button class="btn btn-success btn-small" onclick="runWithSaved('${escAttr(model.path)}', '${h}')">▶ Run</button>`;
         }
         html += `<button class="btn btn-primary btn-small" onclick="showLogModal('${escAttr(model.path)}', '${model.name}')">📋 Log</button>`;
         html += `</td></tr>`;
@@ -756,7 +818,6 @@ function renderModels() {
 // ── Config panel generation ────────────────────────────────────────────
 
 function generateConfigPanel(model, h, isRunning, isLoading) {
-    const isOllama = currentTab === 'ollama';
     let html = `<div id="config-${h}" class="config-panel">`;
 
     // Two columns: Context & Cache | Inference Settings
@@ -773,35 +834,33 @@ function generateConfigPanel(model, h, isRunning, isLoading) {
     html += `<input type="number" id="ctx_size-${h}" step="10" oninput="autoSaveConfig('${escAttr(model.path)}','${h}')">`;
     html += `</div>`;
 
-    // Cache type K (dropdown) - only for llama tab
-    if (!isOllama) {
-        html += `<div class="form-group" id="fg-${h}-cache_type_k">`;
-        html += `<label class="toggle-label"><input type="checkbox" onchange="toggleField('${h}','cache_type_k',this.checked);autoSaveConfig('${escAttr(model.path)}','${h}')">Cache K Quant</label>`;
-        html += `<select id="cache_type_k-${h}" onchange="autoSaveConfig('${escAttr(model.path)}','${h}')">`;
-        html += `<option value="q8_0">q8_0 — Transparent (~2.0x)</option>`;
-        html += `<option value="q4_0">q4_0 — Sweet Spot (~3.8x)</option>`;
-        html += `<option value="turbo4">turbo4 — Premium Turbo (~3.8x)</option>`;
-        html += `<option value="tbqx3">tbqx3 — Latest polar derotation (~4.4x)</option>`;
-        html += `<option value="turbo3">turbo3 — Efficient 200k+ (~4.9x)</option>`;
-        html += `</select></div>`;
+    // Cache type K (dropdown)
+    html += `<div class="form-group" id="fg-${h}-cache_type_k">`;
+    html += `<label class="toggle-label"><input type="checkbox" onchange="toggleField('${h}','cache_type_k',this.checked);autoSaveConfig('${escAttr(model.path)}','${h}')">Cache K Quant</label>`;
+    html += `<select id="cache_type_k-${h}" onchange="autoSaveConfig('${escAttr(model.path)}','${h}')">`;
+    html += `<option value="q8_0">q8_0 — Transparent (~2.0x)</option>`;
+    html += `<option value="q4_0">q4_0 — Sweet Spot (~3.8x)</option>`;
+    html += `<option value="turbo4">turbo4 — Premium Turbo (~3.8x)</option>`;
+    html += `<option value="tbqx3">tbqx3 — Latest polar derotation (~4.4x)</option>`;
+    html += `<option value="turbo3">turbo3 — Efficient 200k+ (~4.9x)</option>`;
+    html += `</select></div>`;
 
-        // Cache type V (dropdown)
-        html += `<div class="form-group" id="fg-${h}-cache_type_v">`;
-        html += `<label class="toggle-label"><input type="checkbox" onchange="toggleField('${h}','cache_type_v',this.checked);autoSaveConfig('${escAttr(model.path)}','${h}')">Cache V Quant</label>`;
-        html += `<select id="cache_type_v-${h}" onchange="autoSaveConfig('${escAttr(model.path)}','${h}')">`;
-        html += `<option value="q8_0">q8_0 — Transparent (~2.0x)</option>`;
-        html += `<option value="q4_0">q4_0 — Sweet Spot (~3.8x)</option>`;
-        html += `<option value="turbo4">turbo4 — Premium Turbo (~3.8x)</option>`;
-        html += `<option value="tbqx3">tbqx3 — Latest polar derotation (~4.4x)</option>`;
-        html += `<option value="turbo3">turbo3 — Efficient 200k+ (~4.9x)</option>`;
-        html += `</select></div>`;
+    // Cache type V (dropdown)
+    html += `<div class="form-group" id="fg-${h}-cache_type_v">`;
+    html += `<label class="toggle-label"><input type="checkbox" onchange="toggleField('${h}','cache_type_v',this.checked);autoSaveConfig('${escAttr(model.path)}','${h}')">Cache V Quant</label>`;
+    html += `<select id="cache_type_v-${h}" onchange="autoSaveConfig('${escAttr(model.path)}','${h}')">`;
+    html += `<option value="q8_0">q8_0 — Transparent (~2.0x)</option>`;
+    html += `<option value="q4_0">q4_0 — Sweet Spot (~3.8x)</option>`;
+    html += `<option value="turbo4">turbo4 — Premium Turbo (~3.8x)</option>`;
+    html += `<option value="tbqx3">tbqx3 — Latest polar derotation (~4.4x)</option>`;
+    html += `<option value="turbo3">turbo3 — Efficient 200k+ (~4.9x)</option>`;
+    html += `</select></div>`;
 
-        // GPU Layers
-        html += `<div class="form-group" id="fg-${h}-n_gpu_layers">`;
-        html += `<label class="toggle-label"><input type="checkbox" checked onchange="toggleField('${h}','n_gpu_layers',this.checked);autoSaveConfig('${escAttr(model.path)}','${h}')">GPU Layers</label>`;
-        html += `<input type="number" id="n_gpu_layers-${h}" oninput="autoSaveConfig('${escAttr(model.path)}','${h}')">`;
-        html += `</div>`;
-    }
+    // GPU Layers
+    html += `<div class="form-group" id="fg-${h}-n_gpu_layers">`;
+    html += `<label class="toggle-label"><input type="checkbox" checked onchange="toggleField('${h}','n_gpu_layers',this.checked);autoSaveConfig('${escAttr(model.path)}','${h}')">GPU Layers</label>`;
+    html += `<input type="number" id="n_gpu_layers-${h}" oninput="autoSaveConfig('${escAttr(model.path)}','${h}')">`;
+    html += `</div>`;
 
     html += `</div></div>`; // close left column
 
@@ -867,28 +926,19 @@ function generateConfigPanel(model, h, isRunning, isLoading) {
     // Bottom row: Speculative decoding + action buttons
     html += `<div class="config-bottom-row">`;
 
-    // Speculative decoding (only for llama tab)
-    if (!isOllama) {
-        html += `<div class="form-group" id="fg-${h}-speculative_decoding" style="margin-right:auto;">`;
-        html += `<label class="toggle-label"><input type="checkbox" onchange="toggleField('${h}','speculative_decoding',this.checked);autoSaveConfig('${escAttr(model.path)}','${h}')">Speculative Decoding</label>`;
-        html += `</div>`;
-    } else {
-        html += `<div style="margin-right:auto;"></div>`;
-    }
+    // Speculative decoding
+    html += `<div class="form-group" id="fg-${h}-speculative_decoding" style="margin-right:auto;">`;
+    html += `<label class="toggle-label"><input type="checkbox" onchange="toggleField('${h}','speculative_decoding',this.checked);autoSaveConfig('${escAttr(model.path)}','${h}')">Speculative Decoding</label>`;
+    html += `</div>`;
 
     // Action buttons
-    if (currentTab === 'llama') {
-        if (isRunning) {
-            html += `<button class="btn btn-danger btn-small" onclick="stopModel('${escAttr(model.path)}')">⏹ Stop</button>`;
-            html += `<button class="btn btn-warning btn-small" onclick="restartModel('${escAttr(model.path)}', '${h}')">⟳ Restart</button>`;
-        } else if (isLoading) {
-            html += `<button class="btn btn-danger btn-small" disabled><span class="spinner"></span> Starting...</button>`;
-        } else {
-            html += `<button class="btn btn-success btn-small" onclick="runFromConfig('${escAttr(model.path)}', '${h}')">▶ Run</button>`;
-        }
+    if (isRunning) {
+        html += `<button class="btn btn-danger btn-small" onclick="stopModel('${escAttr(model.path)}')">⏹ Stop</button>`;
+        html += `<button class="btn btn-warning btn-small" onclick="restartModel('${escAttr(model.path)}', '${h}')">⟳ Restart</button>`;
+    } else if (isLoading) {
+        html += `<button class="btn btn-danger btn-small" disabled><span class="spinner"></span> Starting...</button>`;
     } else {
-        html += `<button class="btn btn-ollama btn-small" onclick="createOllamaModelfile('${escAttr(model.path)}', '${h}')">🦙 Create & Run</button>`;
-        html += `<button class="btn btn-primary btn-small" onclick="viewModelfile('${escAttr(model.path)}')">📄 View</button>`;
+        html += `<button class="btn btn-success btn-small" onclick="runFromConfig('${escAttr(model.path)}', '${h}')">▶ Run</button>`;
     }
 
     html += `<span id="msg-${h}" style="color:#73daca;font-size:0.75rem;"></span>`;
@@ -1518,72 +1568,232 @@ async function fetchModelLog() {
     }
 }
 
-// ── Ollama functions ───────────────────────────────────────────────────
-
-async function createOllamaModelfile(path, h) {
-    const msgEl = document.getElementById('msg-' + h);
-    if (msgEl) msgEl.innerHTML = '<span class="spinner"></span> Creating...';
-
-    const config = collectConfigFields(path, h);
-    await _saveParamsForModel(path, config);
-
-    try {
-        const resp = await fetch('/api/ollama/run', {
-            method: 'POST',
-            headers: {'Content-Type': 'application/json'},
-            body: JSON.stringify({ path, params: config })
-        });
-        const data = await resp.json();
-        if (data.ok) {
-            if (msgEl) msgEl.innerHTML = '<span style="color:#bb9af7">✓ Ollama model created</span>';
-            showToast(`Ollama model created: ${data.ollama_name}`, 'success');
-        } else {
-            if (msgEl) msgEl.innerHTML = `<span style="color:#f7768e">✗ ${data.error || 'Failed'}</span>`;
-            showToast(`Ollama error: ${data.error}`, 'error');
-        }
-    } catch (e) {
-        if (msgEl) msgEl.innerHTML = `<span style="color:#f7768e">✗ ${e.message}</span>`;
-    }
-}
-
-async function viewModelfile(path) {
-    try {
-        const params = savedParamsCache[path] || await _loadParamsForModel(path);
-        const resp = await fetch('/api/ollama/modelfile', {
-            method: 'POST',
-            headers: {'Content-Type': 'application/json'},
-            body: JSON.stringify({ path, params: params || {} })
-        });
-        const data = await resp.json();
-        if (data.ok) {
-            document.getElementById('modelfile-content').textContent = data.content;
-            document.getElementById('modelfile-modal').classList.add('visible');
-        } else {
-            showToast(`Failed to generate modelfile: ${data.error}`, 'error');
-        }
-    } catch (e) {
-        showToast(`Error: ${e.message}`, 'error');
-    }
-}
-
-function closeModelfileModal() {
-    document.getElementById('modelfile-modal').classList.remove('visible');
-}
-
-function copyModelfile() {
-    const content = document.getElementById('modelfile-content').textContent;
-    if (navigator.clipboard && navigator.clipboard.writeText) {
-        navigator.clipboard.writeText(content).then(() => {
-            showToast('Modelfile copied to clipboard', 'success');
-        }).catch(() => fallbackCopy(content));
-    } else {
-        fallbackCopy(content);
-    }
-}
-
 // ── Refresh ────────────────────────────────────────────────────────────
 
 async function refreshModels() { await loadModelsAndStatus(); }
+
+// ── Results ────────────────────────────────────────────────────────────
+
+async function loadResults() {
+    try {
+        const resp = await fetch('/api/results');
+        const data = await resp.json();
+        resultsData = data.results || [];
+        renderResults();
+    } catch (e) {
+        console.error('Failed to load results:', e);
+        document.getElementById('results-list').innerHTML = '<tr><td colspan="9" style="text-align:center;color:#f7768e;">Failed to load results</td></tr>';
+    }
+}
+
+function setResultsSort(field) {
+    if (resultsSortField === field) {
+        resultsSortDir *= -1;
+    } else {
+        resultsSortField = field;
+        resultsSortDir = 1;
+    }
+    renderResults();
+}
+
+function getSortedResults() {
+    const sorted = [...resultsData];
+    sorted.sort((a, b) => {
+        let va = a[resultsSortField];
+        let vb = b[resultsSortField];
+
+        // Handle null/undefined
+        if (va == null) va = '';
+        if (vb == null) vb = '';
+
+        // Numeric sort
+        if (typeof va === 'number' && typeof vb === 'number') {
+            return (va - vb) * resultsSortDir;
+        }
+
+        // String sort
+        const sa = String(va).toLowerCase();
+        const sb = String(vb).toLowerCase();
+        if (sa < sb) return -1 * resultsSortDir;
+        if (sa > sb) return 1 * resultsSortDir;
+        return 0;
+    });
+    return sorted;
+}
+
+function renderResults() {
+    const tbody = document.getElementById('results-list');
+    const summaryEl = document.getElementById('results-summary');
+    const noResultsEl = document.getElementById('no-results');
+
+    // Summary
+    const total = resultsData.length;
+    const successful = resultsData.filter(r => r.status === 'success');
+    const failed = resultsData.filter(r => r.status !== 'success');
+
+    if (total === 0) {
+        summaryEl.innerHTML = '';
+        tbody.innerHTML = '';
+        noResultsEl.style.display = 'block';
+        return;
+    }
+
+    noResultsEl.style.display = 'none';
+
+    let summaryHtml = `<span style="color:#7aa2f7;font-weight:bold;">${total}</span> total · `;
+    summaryHtml += `<span style="color:#9ece6a;font-weight:bold;">${successful.length}</span> successful · `;
+    summaryHtml += `<span style="color:#f7768e;font-weight:bold;">${failed.length}</span> failed`;
+
+    if (successful.length > 0) {
+        const avgTokSec = successful.reduce((s, r) => s + (r.tokens_per_sec || 0), 0) / successful.length;
+        const avgTime = successful.reduce((s, r) => s + (r.total_time || 0), 0) / successful.length;
+        summaryHtml += ` · Avg: <span style="color:#e0af68;font-weight:bold;">${avgTokSec.toFixed(2)}</span> tok/s · `;
+        summaryHtml += `<span style="color:#e0af68;font-weight:bold;">${avgTime.toFixed(1)}s</span>`;
+    }
+    summaryEl.innerHTML = summaryHtml;
+
+    // Update sort arrows
+    document.querySelectorAll('.results-table th').forEach(th => {
+        th.classList.remove('sorted-asc', 'sorted-desc');
+        if (th.dataset.sort === resultsSortField) {
+            th.classList.add(resultsSortDir === 1 ? 'sorted-asc' : 'sorted-desc');
+        }
+    });
+
+    const sorted = getSortedResults();
+    let html = '';
+    for (const r of sorted) {
+        const model = r.model || '';
+        const task = `${r.task || ''}-${r.task_format || ''}`;
+        const temp = r.temperature !== undefined ? r.temperature : '';
+        const status = r.status === 'success'
+            ? '<span style="color:#9ece6a;font-weight:bold;">✅</span>'
+            : `<span style="color:#f7768e;font-weight:bold;" title="${escAttr(r.error || '')}">❌</span>`;
+
+        let tokSec = '-';
+        let compTokens = '-';
+        let totalTime = '-';
+        let tool = '-';
+
+        if (r.status === 'success') {
+            tokSec = r.tokens_per_sec != null ? r.tokens_per_sec.toFixed(2) : '-';
+            compTokens = r.completion_tokens != null ? r.completion_tokens : '-';
+            totalTime = r.total_time != null ? `${r.total_time.toFixed(1)}s` : '-';
+            tool = r.used_tool_call ? '🔧' : '📝';
+        }
+
+        let resultLink = '-';
+        if (r.result_file) {
+            const fmt = r.task_format || '';
+            resultLink = `<button class="btn btn-small btn-primary" onclick="showResultPreview('${escAttr(r.result_file)}','${escAttr(fmt)}')">📄 View</button>`;
+        }
+
+        html += `<tr class="model-row">`;
+        html += `<td style="font-size:0.8rem;color:#c0caf5;word-break:break-all;">${model}</td>`;
+        html += `<td style="font-size:0.8rem;color:#a9b1d6;">${task}</td>`;
+        html += `<td style="font-size:0.8rem;color:#a9b1d6;text-align:center;">${temp}</td>`;
+        html += `<td style="font-size:0.8rem;color:#a9b1d6;text-align:right;">${tokSec}</td>`;
+        html += `<td style="font-size:0.8rem;color:#a9b1d6;text-align:right;">${compTokens}</td>`;
+        html += `<td style="font-size:0.8rem;color:#a9b1d6;text-align:right;">${totalTime}</td>`;
+        html += `<td style="font-size:0.8rem;color:#a9b1d6;text-align:center;">${tool}</td>`;
+        html += `<td style="font-size:0.8rem;text-align:center;">${status}</td>`;
+        html += `<td style="font-size:0.8rem;text-align:center;">${resultLink}</td>`;
+        html += `</tr>`;
+    }
+    tbody.innerHTML = html;
+}
+
+// ── Result Preview Modal ───────────────────────────────────────────────
+
+let _currentPreviewFile = null;
+let _currentPreviewFormat = null;
+
+function showResultPreview(filePath, format) {
+    _currentPreviewFile = filePath;
+    _currentPreviewFormat = format;
+    const modal = document.getElementById('preview-modal');
+    const title = document.getElementById('preview-title');
+    const svgContainer = document.getElementById('preview-svg-container');
+    const iframe = document.getElementById('preview-iframe');
+    const pythonDiv = document.getElementById('preview-python');
+    const pythonCode = document.getElementById('preview-python-code');
+    const pythonOutput = document.getElementById('preview-python-output');
+    const runBtn = document.getElementById('preview-run-btn');
+
+    title.textContent = `📄 ${filePath}`;
+    svgContainer.style.display = 'none';
+    svgContainer.innerHTML = '';
+    iframe.style.display = 'none';
+    iframe.src = '';
+    pythonDiv.style.display = 'none';
+    pythonCode.textContent = '';
+    pythonOutput.style.display = 'none';
+    pythonOutput.textContent = '';
+    pythonOutput.className = '';
+    runBtn.style.display = 'none';
+
+    modal.classList.add('visible');
+
+    const fetchPath = filePath.replace(/^results\//, '');
+    fetch(`/results/${encodeURI(fetchPath)}`)
+        .then(resp => resp.text())
+        .then(content => {
+            if (format === 'svg') {
+                svgContainer.style.display = 'block';
+                svgContainer.innerHTML = content;
+            } else if (format === 'html') {
+                iframe.style.display = 'block';
+                iframe.srcdoc = content;
+            } else if (format === 'py') {
+                pythonDiv.style.display = 'flex';
+                pythonCode.textContent = content;
+                runBtn.style.display = 'inline-block';
+            } else {
+                // Fallback: show as plain text
+                pythonDiv.style.display = 'flex';
+                pythonCode.textContent = content;
+            }
+        })
+        .catch(e => {
+            pythonDiv.style.display = 'flex';
+            pythonCode.textContent = `Failed to load file: ${e.message}`;
+        });
+}
+
+function closePreviewModal() {
+    document.getElementById('preview-modal').classList.remove('visible');
+    document.getElementById('preview-iframe').srcdoc = '';
+    _currentPreviewFile = null;
+    _currentPreviewFormat = null;
+}
+
+async function runPythonPreview() {
+    if (!_currentPreviewFile || _currentPreviewFormat !== 'py') return;
+    const outputEl = document.getElementById('preview-python-output');
+    outputEl.style.display = 'block';
+    outputEl.textContent = 'Running...';
+    outputEl.className = '';
+
+    try {
+        const runPath = _currentPreviewFile.replace(/^results\//, '');
+        const resp = await fetch(`/api/run-python/${encodeURI(runPath)}`);
+        const data = await resp.json();
+        if (data.ok) {
+            let text = '';
+            if (data.stdout) text += data.stdout;
+            if (data.stderr) text += '\n[stderr]\n' + data.stderr;
+            if (data.returncode !== 0) text += `\n[exit code: ${data.returncode}]`;
+            outputEl.textContent = text || '(no output)';
+            outputEl.className = data.returncode === 0 ? 'success' : 'error';
+        } else {
+            outputEl.textContent = data.error || 'Unknown error';
+            outputEl.className = 'error';
+        }
+    } catch (e) {
+        outputEl.textContent = `Error: ${e.message}`;
+        outputEl.className = 'error';
+    }
+}
 </script>
 </body>
 </html>
