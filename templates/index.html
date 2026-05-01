@@ -334,7 +334,7 @@
             <div style="display:flex;align-items:center;gap:6px;">
                 <button class="preview-nav-btn" id="preview-prev-btn" onclick="navigatePreview(-1)">◀ Prev</button>
                 <button class="preview-nav-btn" id="preview-next-btn" onclick="navigatePreview(1)">Next ▶</button>
-                <button class="btn btn-small" id="preview-source-btn" style="display:none;" onclick="togglePythonSource()">📄 Source</button>
+
                 <button class="btn btn-small" onclick="closePreviewModal()">×</button>
             </div>
         </div>
@@ -1794,8 +1794,6 @@ function showResultPreview(filePath, format, rowIdx) {
     const pythonDiv = document.getElementById('preview-python');
     const pythonCode = document.getElementById('preview-python-code');
     const pythonOutput = document.getElementById('preview-python-output');
-    const sourceBtn = document.getElementById('preview-source-btn');
-
     title.textContent = `📄 ${filePath}`;
     svgContainer.style.display = 'none';
     svgContainer.innerHTML = '';
@@ -1807,7 +1805,6 @@ function showResultPreview(filePath, format, rowIdx) {
     pythonOutput.style.display = 'none';
     pythonOutput.textContent = '';
     pythonOutput.className = '';
-    if (sourceBtn) sourceBtn.style.display = 'none';
 
     modal.classList.add('visible');
 
@@ -1825,7 +1822,6 @@ function showResultPreview(filePath, format, rowIdx) {
                 pythonDiv.style.display = 'flex';
                 pythonCode.textContent = content;
                 pythonOutput.style.display = 'block';
-                if (sourceBtn) sourceBtn.style.display = 'inline-block';
                 runPythonPreview();
             } else {
                 pythonDiv.style.display = 'flex';
@@ -1841,18 +1837,7 @@ function showResultPreview(filePath, format, rowIdx) {
         });
 }
 
-function togglePythonSource() {
-    const codeEl = document.getElementById('preview-python-code');
-    const outputEl = document.getElementById('preview-python-output');
-    if (!codeEl) return;
-    if (codeEl.style.display === 'none') {
-        codeEl.style.display = 'block';
-        if (outputEl) outputEl.style.flex = 'none';
-    } else {
-        codeEl.style.display = 'none';
-        if (outputEl) outputEl.style.flex = '1';
-    }
-}
+
 
 function _getModelIndices() {
     const sorted = getSortedResults();
@@ -1904,7 +1889,7 @@ async function runPythonPreview() {
     if (!_currentPreviewFile || _currentPreviewFormat !== 'py') return;
     const outputEl = document.getElementById('preview-python-output');
     outputEl.style.display = 'block';
-    outputEl.textContent = 'Running...';
+    outputEl.innerHTML = '<em>Running...</em>';
     outputEl.className = '';
 
     try {
@@ -1917,7 +1902,7 @@ async function runPythonPreview() {
             if (data.stderr) text += '\n[stderr]\n' + data.stderr;
             if (data.timed_out) text += '\n(timed out after 30s, process killed)';
             if (data.returncode !== 0 && !data.timed_out) text += `\n[exit code: ${data.returncode}]`;
-            outputEl.textContent = text || '(no output)';
+            outputEl.innerHTML = ansiToHtml(text) || '<em>(no output)</em>';
             if (data.timed_out) {
                 outputEl.className = 'timed-out';
             } else {
@@ -1931,6 +1916,76 @@ async function runPythonPreview() {
         outputEl.textContent = `Error: ${e.message}`;
         outputEl.className = 'error';
     }
+}
+
+// ── ANSI to HTML converter ─────────────────────────────────────────────
+
+const _ANSI256 = [];
+// Standard 16 colors
+const _ANSI16 = ['#000000','#800000','#008000','#808000','#000080','#800080','#008080','#c0c0c0','#808080','#ff0000','#00ff00','#ffff00','#0000ff','#ff00ff','#00ffff','#ffffff'];
+for (const c of _ANSI16) _ANSI256.push(c);
+// 216 RGB cube
+for (let r=0;r<6;r++){
+    for(let g=0;g<6;g++){
+        for(let b=0;b<6;b++){
+            const rv=r===0?0:r*40+55;
+            const gv=g===0?0:g*40+55;
+            const bv=b===0?0:b*40+55;
+            _ANSI256.push(`#${rv.toString(16).padStart(2,'0')}${gv.toString(16).padStart(2,'0')}${bv.toString(16).padStart(2,'0')}`);
+        }
+    }
+}
+// 24 grayscale
+for(let i=0;i<24;i++){
+    const v=(i*10+8).toString(16).padStart(2,'0');
+    _ANSI256.push(`#${v}${v}${v}`);
+}
+
+function ansiToHtml(str) {
+    if (!str) return '';
+    // Remove cursor movement, clear screen, erase line codes
+    str = str.replace(/\x1b\[[\d;]*[A-Za-z]/g, (m) => {
+        if (m === '\x1b[0m') return '\x00RESET\x00';
+        const fg256 = m.match(/\x1b\[38;5;(\d+)m/);
+        if (fg256) return `\x00FG${fg256[1]}\x00`;
+        const bg256 = m.match(/\x1b\[48;5;(\d+)m/);
+        if (bg256) return `\x00BG${bg256[1]}\x00`;
+        const fg = m.match(/\x1b\[(\d+)m/);
+        if (fg) {
+            const c = parseInt(fg[1]);
+            if (c >= 30 && c <= 37) return `\x00FG${c-30}\x00`;
+            if (c >= 90 && c <= 97) return `\x00FG${c-82}\x00`;
+        }
+        return '';
+    });
+
+    let html = '';
+    const parts = str.split('\x00');
+    let openSpans = 0;
+    for (let i = 0; i < parts.length; i++) {
+        const p = parts[i];
+        if (p === 'RESET') {
+            while (openSpans > 0) { html += '</span>'; openSpans--; }
+            continue;
+        }
+        if (p.startsWith('FG')) {
+            const idx = parseInt(p.slice(2));
+            const color = _ANSI256[idx] || '#fff';
+            html += `<span style="color:${color}">`;
+            openSpans++;
+            continue;
+        }
+        if (p.startsWith('BG')) {
+            const idx = parseInt(p.slice(2));
+            const color = _ANSI256[idx] || '#000';
+            html += `<span style="background:${color}">`;
+            openSpans++;
+            continue;
+        }
+        html += p.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+    }
+    while (openSpans > 0) { html += '</span>'; openSpans--; }
+    return html;
 }
 
 // ── Error Modal ────────────────────────────────────────────────────────
