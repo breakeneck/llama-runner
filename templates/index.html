@@ -209,10 +209,11 @@
         #preview-svg-container { display:none; width:100%; height:100%; }
         #preview-iframe { display:none; width:100%; height:100%; border:1px solid #414868; border-radius:6px; background:#fff; }
         #preview-python { display:none; width:100%; height:100%; display:flex; flex-direction:column; gap:8px; }
-        #preview-python-code { background:#1a1b26; border:1px solid #414868; border-radius:6px; padding:12px; font-family:'Courier New',monospace; font-size:0.8rem; color:#9ece6a; white-space:pre-wrap; word-break:break-all; overflow:auto; flex:1; }
-        #preview-python-output { background:#000; border:1px solid #333; border-radius:6px; padding:12px; font-family:'Courier New',monospace; font-size:0.85rem; color:#0f0; white-space:pre-wrap; word-break:break-all; overflow:auto; min-height:80px; max-height:200px; }
+        #preview-python-code { display:none; background:#1a1b26; border:1px solid #414868; border-radius:6px; padding:12px; font-family:'Courier New',monospace; font-size:0.8rem; color:#9ece6a; white-space:pre-wrap; word-break:break-all; overflow:auto; flex:1; }
+        #preview-python-output { background:#000; border:1px solid #333; border-radius:6px; padding:12px; font-family:'Courier New',monospace; font-size:0.85rem; color:#0f0; white-space:pre-wrap; word-break:break-all; overflow:auto; flex:1; min-height:120px; }
         #preview-python-output.error { color:#f55; border-color:#f55; }
         #preview-python-output.success { color:#0f0; border-color:#0f0; }
+        #preview-python-output.timed-out { color:#e0af68; border-color:#e0af68; }
 
         /* Model group headers in results table */
         .model-group-header { background:#24283b; color:#7aa2f7; font-weight:bold; font-size:0.85rem; padding:8px 10px; border-top:2px solid #414868; cursor:pointer; user-select:none; }
@@ -333,7 +334,7 @@
             <div style="display:flex;align-items:center;gap:6px;">
                 <button class="preview-nav-btn" id="preview-prev-btn" onclick="navigatePreview(-1)">◀ Prev</button>
                 <button class="preview-nav-btn" id="preview-next-btn" onclick="navigatePreview(1)">Next ▶</button>
-                <button class="btn btn-small" id="preview-run-btn" style="display:none;" onclick="runPythonPreview()">▶ Run</button>
+                <button class="btn btn-small" id="preview-source-btn" style="display:none;" onclick="togglePythonSource()">📄 Source</button>
                 <button class="btn btn-small" onclick="closePreviewModal()">×</button>
             </div>
         </div>
@@ -1793,7 +1794,7 @@ function showResultPreview(filePath, format, rowIdx) {
     const pythonDiv = document.getElementById('preview-python');
     const pythonCode = document.getElementById('preview-python-code');
     const pythonOutput = document.getElementById('preview-python-output');
-    const runBtn = document.getElementById('preview-run-btn');
+    const sourceBtn = document.getElementById('preview-source-btn');
 
     title.textContent = `📄 ${filePath}`;
     svgContainer.style.display = 'none';
@@ -1802,10 +1803,11 @@ function showResultPreview(filePath, format, rowIdx) {
     iframe.src = '';
     pythonDiv.style.display = 'none';
     pythonCode.textContent = '';
+    pythonCode.style.display = 'none';
     pythonOutput.style.display = 'none';
     pythonOutput.textContent = '';
     pythonOutput.className = '';
-    runBtn.style.display = 'none';
+    if (sourceBtn) sourceBtn.style.display = 'none';
 
     modal.classList.add('visible');
 
@@ -1822,24 +1824,53 @@ function showResultPreview(filePath, format, rowIdx) {
             } else if (format === 'py') {
                 pythonDiv.style.display = 'flex';
                 pythonCode.textContent = content;
-                runBtn.style.display = 'inline-block';
+                pythonOutput.style.display = 'block';
+                if (sourceBtn) sourceBtn.style.display = 'inline-block';
+                runPythonPreview();
             } else {
                 pythonDiv.style.display = 'flex';
                 pythonCode.textContent = content;
+                pythonCode.style.display = 'block';
             }
         })
         .catch(e => {
             pythonDiv.style.display = 'flex';
-            pythonCode.textContent = `Failed to load file: ${e.message}`;
+            pythonOutput.style.display = 'block';
+            pythonOutput.textContent = `Failed to load file: ${e.message}`;
+            pythonOutput.className = 'error';
         });
 }
 
-function _updatePreviewNav() {
+function togglePythonSource() {
+    const codeEl = document.getElementById('preview-python-code');
+    const outputEl = document.getElementById('preview-python-output');
+    if (!codeEl) return;
+    if (codeEl.style.display === 'none') {
+        codeEl.style.display = 'block';
+        if (outputEl) outputEl.style.flex = 'none';
+    } else {
+        codeEl.style.display = 'none';
+        if (outputEl) outputEl.style.flex = '1';
+    }
+}
+
+function _getModelIndices() {
     const sorted = getSortedResults();
+    const current = sorted[_currentPreviewIdx];
+    if (!current) return { indices: [], current: 0 };
+    const modelName = current.model;
+    const indices = [];
+    sorted.forEach((r, i) => { if (r.model === modelName && r.result_file) indices.push(i); });
+    const pos = indices.indexOf(_currentPreviewIdx);
+    return { indices, current: pos };
+}
+
+function _updatePreviewNav() {
+    const { indices, current } = _getModelIndices();
     const prevBtn = document.getElementById('preview-prev-btn');
     const nextBtn = document.getElementById('preview-next-btn');
-    if (prevBtn) prevBtn.disabled = _currentPreviewIdx <= 0;
-    if (nextBtn) nextBtn.disabled = _currentPreviewIdx < 0 || _currentPreviewIdx >= sorted.length - 1;
+    if (prevBtn) prevBtn.disabled = current <= 0;
+    if (nextBtn) nextBtn.disabled = current < 0 || current >= indices.length - 1;
 }
 
 function _highlightRow(idx) {
@@ -1850,8 +1881,10 @@ function _highlightRow(idx) {
 
 function navigatePreview(dir) {
     const sorted = getSortedResults();
-    const newIdx = _currentPreviewIdx + dir;
-    if (newIdx < 0 || newIdx >= sorted.length) return;
+    const { indices, current } = _getModelIndices();
+    const newPos = current + dir;
+    if (newPos < 0 || newPos >= indices.length) return;
+    const newIdx = indices[newPos];
     const r = sorted[newIdx];
     if (r.result_file) {
         showResultPreview(r.result_file, r.task_format || '', newIdx);
@@ -1882,9 +1915,14 @@ async function runPythonPreview() {
             let text = '';
             if (data.stdout) text += data.stdout;
             if (data.stderr) text += '\n[stderr]\n' + data.stderr;
-            if (data.returncode !== 0) text += `\n[exit code: ${data.returncode}]`;
+            if (data.timed_out) text += '\n(timed out after 30s, process killed)';
+            if (data.returncode !== 0 && !data.timed_out) text += `\n[exit code: ${data.returncode}]`;
             outputEl.textContent = text || '(no output)';
-            outputEl.className = data.returncode === 0 ? 'success' : 'error';
+            if (data.timed_out) {
+                outputEl.className = 'timed-out';
+            } else {
+                outputEl.className = data.returncode === 0 ? 'success' : 'error';
+            }
         } else {
             outputEl.textContent = data.error || 'Unknown error';
             outputEl.className = 'error';

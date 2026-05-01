@@ -919,7 +919,7 @@ def serve_result_file(path):
 
 @app.route('/api/run-python/<path:path>')
 def api_run_python(path):
-    """Run a Python result file and return its output."""
+    """Run a Python result file and return its output (streaming-like with timeout)."""
     file_path = RESULTS_DIR / path
     # Security: ensure the file is inside RESULTS_DIR
     try:
@@ -933,19 +933,63 @@ def api_run_python(path):
     if not file_path.is_file():
         return jsonify({'error': 'File not found'}), 404
 
+    import select
     try:
-        result = subprocess.run(
+        proc = subprocess.Popen(
             ['python3', str(file_path)],
-            capture_output=True, text=True, timeout=15
+            stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True
         )
+        stdout_lines = []
+        stderr_lines = []
+        max_output = 5000  # max chars
+        timeout = 30       # seconds
+        start = time.time()
+
+        while proc.poll() is None and (time.time() - start) < timeout:
+            ready, _, _ = select.select([proc.stdout, proc.stderr], [], [], 0.5)
+            for stream in ready:
+                line = stream.readline()
+                if not line:
+                    continue
+                if len(''.join(stdout_lines) + ''.join(stderr_lines)) > max_output:
+                    break
+                if stream is proc.stdout:
+                    stdout_lines.append(line)
+                else:
+                    stderr_lines.append(line)
+            if len(''.join(stdout_lines) + ''.join(stderr_lines)) > max_output:
+                break
+
+        still_running = proc.poll() is None
+        if still_running:
+            try:
+                proc.kill()
+                proc.wait(timeout=2)
+            except Exception:
+                pass
+
+        # Drain remaining output
+        try:
+            remaining_out, remaining_err = proc.communicate(timeout=3)
+        except Exception:
+            remaining_out = remaining_err = ''
+
+        stdout = ''.join(stdout_lines) + (remaining_out or '')
+        stderr = ''.join(stderr_lines) + (remaining_err or '')
+
+        # Trim if too large
+        if len(stdout) > max_output:
+            stdout = stdout[:max_output] + '\n... (output truncated)'
+        if len(stderr) > max_output:
+            stderr = stderr[:max_output] + '\n... (stderr truncated)'
+
         return jsonify({
             'ok': True,
-            'stdout': result.stdout,
-            'stderr': result.stderr,
-            'returncode': result.returncode,
+            'stdout': stdout,
+            'stderr': stderr,
+            'returncode': proc.returncode if proc.returncode is not None else -1,
+            'timed_out': still_running,
         })
-    except subprocess.TimeoutExpired:
-        return jsonify({'ok': False, 'error': 'Execution timed out (15s)'}), 408
     except Exception as e:
         return jsonify({'ok': False, 'error': str(e)}), 500
 
