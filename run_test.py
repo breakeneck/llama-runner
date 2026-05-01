@@ -152,17 +152,26 @@ def extract_content(raw_content, task_format):
     """
     content = raw_content.strip()
 
-    # Step 1: Try to extract from markdown code blocks (```format\n...\n```)
-    # Match ```svg, ```html, ```xml, or plain ```
+    # Step 1: Try to extract from markdown code blocks
+    # Generic pattern: ```lang\n...\n``` or ```\n...\n```
     code_block_pattern = re.compile(
-        r'```(?:' + re.escape(task_format) + r'|xml)?\s*\n(.*?)```',
+        r'```(?:\w+)?\s*\n(.*?)```',
         re.DOTALL,
     )
     match = code_block_pattern.search(content)
     if match:
         return match.group(1).strip()
 
-    # Step 2: Extract by finding the main structural tag
+    # Step 2: Also handle case where ``` is at the very start
+    if content.startswith('```'):
+        # Remove first line (```lang) and last line (```)
+        lines = content.split('\n')
+        if len(lines) >= 2 and lines[-1].strip() == '```':
+            return '\n'.join(lines[1:-1]).strip()
+        elif len(lines) >= 1:
+            return '\n'.join(lines[1:]).strip()
+
+    # Step 3: Extract by finding the main structural tag
     if task_format == 'svg':
         # Find <svg ...> ... </svg>
         match = re.search(r'(<svg\b.*?</svg>)', content, re.DOTALL)
@@ -184,7 +193,7 @@ def extract_content(raw_content, task_format):
         if match:
             return match.group(1)
 
-    # Step 3: No patterns matched — return as-is
+    # Step 4: No patterns matched — return as-is
     return content
 
 
@@ -253,14 +262,14 @@ def start_model(model_path, kvcache=None):
         return {'ok': False, 'error': str(e)}
 
 
-def stop_model(model_path):
+def stop_model(model_path, timeout=3):
     """Stop a running model via llama-runner API."""
     data = {'path': model_path}
     try:
         resp = requests.post(
             f'{LLAMA_RUNNER_URL}/api/models/stop',
             json=data,
-            timeout=10,
+            timeout=timeout,
         )
         return resp.json()
     except Exception:
@@ -597,6 +606,11 @@ def main():
         nonlocal interrupted
         interrupted = True
         print(f"\n⛔ Interrupted! Saving results...")
+        # Force save and exit immediately
+        results_data['results'] = existing_results
+        save_results(results_data)
+        print(f"   Results saved to {RESULTS_JSON}")
+        sys.exit(0)
 
     signal.signal(signal.SIGINT, handle_signal)
     signal.signal(signal.SIGTERM, handle_signal)
@@ -808,10 +822,10 @@ def main():
         import traceback
         traceback.print_exc()
     finally:
-        # Stop current model if still running
+        # Stop current model if still running (use short timeout if interrupted)
         if current_model_path:
             try:
-                stop_model(current_model_path)
+                stop_model(current_model_path, timeout=2 if interrupted else 10)
             except Exception:
                 pass
 

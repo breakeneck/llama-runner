@@ -210,9 +210,28 @@
         #preview-iframe { display:none; width:100%; height:100%; border:1px solid #414868; border-radius:6px; background:#fff; }
         #preview-python { display:none; width:100%; height:100%; display:flex; flex-direction:column; gap:8px; }
         #preview-python-code { background:#1a1b26; border:1px solid #414868; border-radius:6px; padding:12px; font-family:'Courier New',monospace; font-size:0.8rem; color:#9ece6a; white-space:pre-wrap; word-break:break-all; overflow:auto; flex:1; }
-        #preview-python-output { background:#24283b; border:1px solid #414868; border-radius:6px; padding:12px; font-family:'Courier New',monospace; font-size:0.8rem; color:#a9b1d6; white-space:pre-wrap; word-break:break-all; overflow:auto; min-height:80px; max-height:200px; }
-        #preview-python-output.error { color:#f7768e; border-color:#f7768e; }
-        #preview-python-output.success { color:#9ece6a; border-color:#9ece6a; }
+        #preview-python-output { background:#000; border:1px solid #333; border-radius:6px; padding:12px; font-family:'Courier New',monospace; font-size:0.85rem; color:#0f0; white-space:pre-wrap; word-break:break-all; overflow:auto; min-height:80px; max-height:200px; }
+        #preview-python-output.error { color:#f55; border-color:#f55; }
+        #preview-python-output.success { color:#0f0; border-color:#0f0; }
+
+        /* Model group headers in results table */
+        .model-group-header { background:#24283b; color:#7aa2f7; font-weight:bold; font-size:0.85rem; padding:8px 10px; border-top:2px solid #414868; cursor:pointer; user-select:none; }
+        .model-group-header:hover { background:#292e42; }
+        .model-group-header .group-toggle { margin-right:6px; font-size:0.7rem; }
+        .model-group.collapsed .group-row { display:none; }
+        .model-row.selected-row { background:#2f3f5f !important; outline:1px solid #7aa2f7; }
+
+        /* Preview navigation */
+        .preview-nav-btn { background:#414868; border:none; color:#a9b1d6; padding:4px 10px; border-radius:4px; cursor:pointer; font-size:0.75rem; margin:0 2px; }
+        .preview-nav-btn:hover { background:#7aa2f7; color:#1a1b26; }
+        .preview-nav-btn:disabled { opacity:0.3; cursor:not-allowed; }
+
+        /* Error modal */
+        #error-modal { display:none; position:fixed; top:0;left:0;width:100%;height:100%; background:rgba(0,0,0,0.7); z-index:1001; justify-content:center; align-items:center; }
+        #error-modal.visible { display:flex; }
+        #error-box { background:#1a1b26; border:1px solid #f7768e; border-radius:8px; width:80%; max-width:600px; max-height:70%; display:flex; flex-direction:column; }
+        #error-header { padding:10px 16px; background:#24283b; border-bottom:1px solid #f7768e; border-radius:8px 8px 0 0; display:flex; justify-content:space-between; align-items:center; color:#f7768e; font-weight:bold; }
+        #error-body { flex:1; overflow:auto; padding:16px; font-family:'Courier New',monospace; font-size:0.8rem; color:#f7768e; white-space:pre-wrap; word-break:break-all; }
     </style>
 </head>
 <body>
@@ -311,7 +330,9 @@
     <div id="preview-box">
         <div id="preview-header">
             <span id="preview-title">📄 Result Preview</span>
-            <div>
+            <div style="display:flex;align-items:center;gap:6px;">
+                <button class="preview-nav-btn" id="preview-prev-btn" onclick="navigatePreview(-1)">◀ Prev</button>
+                <button class="preview-nav-btn" id="preview-next-btn" onclick="navigatePreview(1)">Next ▶</button>
                 <button class="btn btn-small" id="preview-run-btn" style="display:none;" onclick="runPythonPreview()">▶ Run</button>
                 <button class="btn btn-small" onclick="closePreviewModal()">×</button>
             </div>
@@ -324,6 +345,17 @@
                 <pre id="preview-python-output" style="display:none;"></pre>
             </div>
         </div>
+    </div>
+</div>
+
+<!-- Error Modal -->
+<div id="error-modal">
+    <div id="error-box">
+        <div id="error-header">
+            <span>❌ Error Details</span>
+            <button class="btn btn-small" onclick="closeErrorModal()">×</button>
+        </div>
+        <pre id="error-body"></pre>
     </div>
 </div>
 
@@ -1574,6 +1606,16 @@ async function refreshModels() { await loadModelsAndStatus(); }
 
 // ── Results ────────────────────────────────────────────────────────────
 
+function formatTimeAgo(timestamp) {
+    if (!timestamp) return '';
+    const now = Date.now() / 1000;
+    const diff = now - timestamp;
+    if (diff < 60) return 'just now';
+    if (diff < 3600) return `${Math.floor(diff / 60)}m ago`;
+    if (diff < 86400) return `${Math.floor(diff / 3600)}h ago`;
+    return `${Math.floor(diff / 86400)}d ago`;
+}
+
 async function loadResults() {
     try {
         const resp = await fetch('/api/results');
@@ -1601,17 +1643,11 @@ function getSortedResults() {
     sorted.sort((a, b) => {
         let va = a[resultsSortField];
         let vb = b[resultsSortField];
-
-        // Handle null/undefined
         if (va == null) va = '';
         if (vb == null) vb = '';
-
-        // Numeric sort
         if (typeof va === 'number' && typeof vb === 'number') {
             return (va - vb) * resultsSortDir;
         }
-
-        // String sort
         const sa = String(va).toLowerCase();
         const sb = String(vb).toLowerCase();
         if (sa < sb) return -1 * resultsSortDir;
@@ -1621,12 +1657,23 @@ function getSortedResults() {
     return sorted;
 }
 
+function getResultIcon(fmt) {
+    if (fmt === 'svg') return '🎨';
+    if (fmt === 'html') return '🌐';
+    if (fmt === 'py') return '🐍';
+    return '📄';
+}
+
+function toggleModelGroup(groupId) {
+    const group = document.getElementById(groupId);
+    if (group) group.classList.toggle('collapsed');
+}
+
 function renderResults() {
     const tbody = document.getElementById('results-list');
     const summaryEl = document.getElementById('results-summary');
     const noResultsEl = document.getElementById('no-results');
 
-    // Summary
     const total = resultsData.length;
     const successful = resultsData.filter(r => r.status === 'success');
     const failed = resultsData.filter(r => r.status !== 'success');
@@ -1640,6 +1687,10 @@ function renderResults() {
 
     noResultsEl.style.display = 'none';
 
+    // Last activity timestamp
+    const lastTs = resultsData.reduce((max, r) => Math.max(max, r.timestamp || 0), 0);
+    const lastAgo = lastTs ? ` · Last: ${formatTimeAgo(lastTs)}` : '';
+
     let summaryHtml = `<span style="color:#7aa2f7;font-weight:bold;">${total}</span> total · `;
     summaryHtml += `<span style="color:#9ece6a;font-weight:bold;">${successful.length}</span> successful · `;
     summaryHtml += `<span style="color:#f7768e;font-weight:bold;">${failed.length}</span> failed`;
@@ -1650,6 +1701,7 @@ function renderResults() {
         summaryHtml += ` · Avg: <span style="color:#e0af68;font-weight:bold;">${avgTokSec.toFixed(2)}</span> tok/s · `;
         summaryHtml += `<span style="color:#e0af68;font-weight:bold;">${avgTime.toFixed(1)}s</span>`;
     }
+    summaryHtml += `<span style="color:#565f89;margin-left:8px;">${lastAgo}</span>`;
     summaryEl.innerHTML = summaryHtml;
 
     // Update sort arrows
@@ -1660,45 +1712,63 @@ function renderResults() {
         }
     });
 
+    // Group by model
     const sorted = getSortedResults();
-    let html = '';
+    const grouped = {};
     for (const r of sorted) {
-        const model = r.model || '';
-        const task = `${r.task || ''}-${r.task_format || ''}`;
-        const temp = r.temperature !== undefined ? r.temperature : '';
-        const status = r.status === 'success'
-            ? '<span style="color:#9ece6a;font-weight:bold;">✅</span>'
-            : `<span style="color:#f7768e;font-weight:bold;" title="${escAttr(r.error || '')}">❌</span>`;
+        const m = r.model || 'Unknown';
+        if (!grouped[m]) grouped[m] = [];
+        grouped[m].push(r);
+    }
 
-        let tokSec = '-';
-        let compTokens = '-';
-        let totalTime = '-';
-        let tool = '-';
+    let html = '';
+    let rowIdx = 0;
+    for (const [modelName, rows] of Object.entries(grouped)) {
+        const groupId = 'grp-' + hashStr(modelName);
+        html += `<tbody class="model-group" id="${groupId}">`;
+        html += `<tr class="model-group-header" onclick="toggleModelGroup('${groupId}')"><td colspan="9"><span class="group-toggle">▼</span> ${escAttr(modelName)} <span style="color:#565f89;font-size:0.75rem;">(${rows.length})</span></td></tr>`;
+        for (const r of rows) {
+            const task = `${r.task || ''}-${r.task_format || ''}`;
+            const temp = r.temperature !== undefined ? r.temperature : '';
+            const status = r.status === 'success'
+                ? '<span style="color:#9ece6a;font-weight:bold;">✅</span>'
+                : `<span style="color:#f7768e;font-weight:bold;">❌</span>`;
 
-        if (r.status === 'success') {
-            tokSec = r.tokens_per_sec != null ? r.tokens_per_sec.toFixed(2) : '-';
-            compTokens = r.completion_tokens != null ? r.completion_tokens : '-';
-            totalTime = r.total_time != null ? `${r.total_time.toFixed(1)}s` : '-';
-            tool = r.used_tool_call ? '🔧' : '📝';
+            let tokSec = '-';
+            let compTokens = '-';
+            let totalTime = '-';
+            let tool = '-';
+
+            if (r.status === 'success') {
+                tokSec = r.tokens_per_sec != null ? r.tokens_per_sec.toFixed(2) : '-';
+                compTokens = r.completion_tokens != null ? r.completion_tokens : '-';
+                totalTime = r.total_time != null ? `${r.total_time.toFixed(1)}s` : '-';
+                tool = r.used_tool_call ? '🔧' : '📝';
+            }
+
+            let resultCell = '-';
+            if (r.status !== 'success' && r.error) {
+                resultCell = `<button class="btn btn-small btn-danger" onclick="showErrorModal('${escAttr(r.error)}')">❌ Error</button>`;
+            } else if (r.result_file) {
+                const fmt = r.task_format || '';
+                const icon = getResultIcon(fmt);
+                resultCell = `<button class="btn btn-small btn-primary" onclick="showResultPreview('${escAttr(r.result_file)}','${escAttr(fmt)}',${rowIdx})">${icon} View</button>`;
+            }
+
+            html += `<tr class="model-row group-row" data-row-idx="${rowIdx}" data-file="${escAttr(r.result_file || '')}" data-fmt="${escAttr(r.task_format || '')}">`;
+            html += `<td style="font-size:0.8rem;color:#c0caf5;word-break:break-all;">${escAttr(modelName)}</td>`;
+            html += `<td style="font-size:0.8rem;color:#a9b1d6;">${task}</td>`;
+            html += `<td style="font-size:0.8rem;color:#a9b1d6;text-align:center;">${temp}</td>`;
+            html += `<td style="font-size:0.8rem;color:#a9b1d6;text-align:right;">${tokSec}</td>`;
+            html += `<td style="font-size:0.8rem;color:#a9b1d6;text-align:right;">${compTokens}</td>`;
+            html += `<td style="font-size:0.8rem;color:#a9b1d6;text-align:right;">${totalTime}</td>`;
+            html += `<td style="font-size:0.8rem;color:#a9b1d6;text-align:center;">${tool}</td>`;
+            html += `<td style="font-size:0.8rem;text-align:center;">${status}</td>`;
+            html += `<td style="font-size:0.8rem;text-align:center;">${resultCell}</td>`;
+            html += `</tr>`;
+            rowIdx++;
         }
-
-        let resultLink = '-';
-        if (r.result_file) {
-            const fmt = r.task_format || '';
-            resultLink = `<button class="btn btn-small btn-primary" onclick="showResultPreview('${escAttr(r.result_file)}','${escAttr(fmt)}')">📄 View</button>`;
-        }
-
-        html += `<tr class="model-row">`;
-        html += `<td style="font-size:0.8rem;color:#c0caf5;word-break:break-all;">${model}</td>`;
-        html += `<td style="font-size:0.8rem;color:#a9b1d6;">${task}</td>`;
-        html += `<td style="font-size:0.8rem;color:#a9b1d6;text-align:center;">${temp}</td>`;
-        html += `<td style="font-size:0.8rem;color:#a9b1d6;text-align:right;">${tokSec}</td>`;
-        html += `<td style="font-size:0.8rem;color:#a9b1d6;text-align:right;">${compTokens}</td>`;
-        html += `<td style="font-size:0.8rem;color:#a9b1d6;text-align:right;">${totalTime}</td>`;
-        html += `<td style="font-size:0.8rem;color:#a9b1d6;text-align:center;">${tool}</td>`;
-        html += `<td style="font-size:0.8rem;text-align:center;">${status}</td>`;
-        html += `<td style="font-size:0.8rem;text-align:center;">${resultLink}</td>`;
-        html += `</tr>`;
+        html += `</tbody>`;
     }
     tbody.innerHTML = html;
 }
@@ -1707,10 +1777,15 @@ function renderResults() {
 
 let _currentPreviewFile = null;
 let _currentPreviewFormat = null;
+let _currentPreviewIdx = -1;
 
-function showResultPreview(filePath, format) {
+function showResultPreview(filePath, format, rowIdx) {
     _currentPreviewFile = filePath;
     _currentPreviewFormat = format;
+    _currentPreviewIdx = rowIdx;
+    _updatePreviewNav();
+    _highlightRow(rowIdx);
+
     const modal = document.getElementById('preview-modal');
     const title = document.getElementById('preview-title');
     const svgContainer = document.getElementById('preview-svg-container');
@@ -1749,7 +1824,6 @@ function showResultPreview(filePath, format) {
                 pythonCode.textContent = content;
                 runBtn.style.display = 'inline-block';
             } else {
-                // Fallback: show as plain text
                 pythonDiv.style.display = 'flex';
                 pythonCode.textContent = content;
             }
@@ -1760,11 +1834,37 @@ function showResultPreview(filePath, format) {
         });
 }
 
+function _updatePreviewNav() {
+    const sorted = getSortedResults();
+    const prevBtn = document.getElementById('preview-prev-btn');
+    const nextBtn = document.getElementById('preview-next-btn');
+    if (prevBtn) prevBtn.disabled = _currentPreviewIdx <= 0;
+    if (nextBtn) nextBtn.disabled = _currentPreviewIdx < 0 || _currentPreviewIdx >= sorted.length - 1;
+}
+
+function _highlightRow(idx) {
+    document.querySelectorAll('.model-row').forEach(tr => tr.classList.remove('selected-row'));
+    const row = document.querySelector(`tr[data-row-idx="${idx}"]`);
+    if (row) row.classList.add('selected-row');
+}
+
+function navigatePreview(dir) {
+    const sorted = getSortedResults();
+    const newIdx = _currentPreviewIdx + dir;
+    if (newIdx < 0 || newIdx >= sorted.length) return;
+    const r = sorted[newIdx];
+    if (r.result_file) {
+        showResultPreview(r.result_file, r.task_format || '', newIdx);
+    }
+}
+
 function closePreviewModal() {
     document.getElementById('preview-modal').classList.remove('visible');
     document.getElementById('preview-iframe').srcdoc = '';
+    document.querySelectorAll('.model-row').forEach(tr => tr.classList.remove('selected-row'));
     _currentPreviewFile = null;
     _currentPreviewFormat = null;
+    _currentPreviewIdx = -1;
 }
 
 async function runPythonPreview() {
@@ -1793,6 +1893,17 @@ async function runPythonPreview() {
         outputEl.textContent = `Error: ${e.message}`;
         outputEl.className = 'error';
     }
+}
+
+// ── Error Modal ────────────────────────────────────────────────────────
+
+function showErrorModal(error) {
+    document.getElementById('error-body').textContent = error || 'Unknown error';
+    document.getElementById('error-modal').classList.add('visible');
+}
+
+function closeErrorModal() {
+    document.getElementById('error-modal').classList.remove('visible');
 }
 </script>
 </body>
