@@ -1017,6 +1017,11 @@ function generateConfigPanel(model, h, isRunning, isLoading) {
     // Bottom row: Speculative decoding + action buttons
     html += `<div class="config-bottom-row">`;
 
+    // Enable Thinking (left side)
+    html += `<div class="form-group" id="fg-${h}-enable_thinking" style="margin-right:auto;">`;
+    html += `<label class="toggle-label"><input type="checkbox" checked onchange="toggleField('${h}','enable_thinking',this.checked);autoSaveConfig('${escAttr(model.path)}','${h}')">Enable Thinking</label>`;
+    html += `</div>`;
+
     // Speculative decoding
     html += `<div class="form-group" id="fg-${h}-speculative_decoding" style="margin-right:auto;">`;
     html += `<label class="toggle-label"><input type="checkbox" onchange="toggleField('${h}','speculative_decoding',this.checked);autoSaveConfig('${escAttr(model.path)}','${h}')">Speculative Decoding</label>`;
@@ -1088,8 +1093,8 @@ async function toggleConfig(path) {
     if (panel.classList.toggle('visible')) {
         // Load params and populate
         const params = await _loadParamsForModel(path);
-        const defaults = { ctx_size: 100, temp: 0.2, top_p: 0.95, top_k: 20, min_p: 0.0, presence_penalty: 0.0, repeat_penalty: 1.0, cache_type_k: 'q8_0', cache_type_v: 'q8_0', n_gpu_layers: 999, speculative_decoding: false };
-        const allFields = ['ctx_size', 'temp', 'top_p', 'top_k', 'min_p', 'presence_penalty', 'repeat_penalty', 'cache_type_k', 'cache_type_v', 'n_gpu_layers', 'speculative_decoding'];
+        const defaults = { ctx_size: 100, temp: 0.2, top_p: 0.95, top_k: 20, min_p: 0.0, presence_penalty: 0.0, repeat_penalty: 1.0, cache_type_k: 'q8_0', cache_type_v: 'q8_0', n_gpu_layers: 999, speculative_decoding: false, enable_thinking: true };
+        const allFields = ['ctx_size', 'temp', 'top_p', 'top_k', 'min_p', 'presence_penalty', 'repeat_penalty', 'cache_type_k', 'cache_type_v', 'n_gpu_layers', 'speculative_decoding', 'enable_thinking'];
 
         for (const field of allFields) {
             const input = document.getElementById(`${field}-${h}`);

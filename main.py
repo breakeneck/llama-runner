@@ -5,6 +5,7 @@ import json
 import os
 import re
 import shlex
+import shutil
 import signal
 import subprocess
 import time
@@ -42,6 +43,19 @@ LLAMA_SERVER_CMD = os.getenv(
 )
 MODEL_PORT = int(os.getenv('MODEL_PORT', '12345'))
 
+# Resolve the llama-server binary library directory for LD_LIBRARY_PATH
+# The binary has RUNPATH hardcoded to a build path that may not exist.
+# We set LD_LIBRARY_PATH at spawn time to ensure bundled .so are found.
+_LLAMA_SERVER_BIN = shlex.split(LLAMA_SERVER_CMD)[0]
+_LLAMA_SERVER_LIB_DIR: str | None = None
+_LLAMA_BIN_RESOLVED = Path(_LLAMA_SERVER_BIN)
+if not _LLAMA_BIN_RESOLVED.is_file():
+    which_bin = shutil.which(_LLAMA_SERVER_BIN)
+    if which_bin:
+        _LLAMA_BIN_RESOLVED = Path(which_bin)
+if _LLAMA_BIN_RESOLVED.is_file():
+    _LLAMA_SERVER_LIB_DIR = str(_LLAMA_BIN_RESOLVED.resolve().parent)
+
 # ── Process registry ───────────────────────────────────────────────────
 running_processes: dict[str, dict] = {}
 """key=model_path, value={'pid': int, 'port': int, 'proc': Popen, **params}"""
@@ -65,13 +79,15 @@ _DEFAULT_PARAMS = {
     'cache_type_v': 'q8_0',
     'n_gpu_layers': 999,
     'speculative_decoding': False,
+    'enable_thinking': True,
 }
 
 # Which params have enable/disable toggles
 _TOGGLED_PARAMS = {
     'ctx_size', 'temp', 'top_p', 'top_k', 'min_p',
     'presence_penalty', 'repeat_penalty',
-    'cache_type_k', 'cache_type_v', 'n_gpu_layers', 'speculative_decoding'
+    'cache_type_k', 'cache_type_v', 'n_gpu_layers', 'speculative_decoding',
+    'enable_thinking',
 }
 
 # Params affected by templates (inference settings)
@@ -197,7 +213,7 @@ def get_model_params(path: str) -> dict:
             val = float(val)
         elif key in ('top_k', 'n_gpu_layers'):
             val = int(val)
-        elif key == 'speculative_decoding':
+        elif key in ('speculative_decoding', 'enable_thinking'):
             val = bool(val)
         else:
             val = str(val)
@@ -462,6 +478,10 @@ def _build_run_command(data: dict) -> list[str]:
     if data.get('speculative_decoding_enabled'):
         cmd.extend(['--spec-type', 'ngram-mod', '--spec-ngram-size-n', '24', '--draft-min', '12', '--draft-max', '48'])
 
+    if data.get('enable_thinking_enabled', True):
+        if not data.get('enable_thinking', True):
+            cmd.append('--no-enable-thinking')
+
     return cmd
 
 
@@ -489,12 +509,21 @@ def api_run_model():
     log_path = _log_path_for_model(path)
     log_file = open(log_path, 'w')
 
+    # Set LD_LIBRARY_PATH so the binary can find its bundled .so files
+    env = os.environ.copy()
+    if _LLAMA_SERVER_LIB_DIR:
+        existing = env.get('LD_LIBRARY_PATH', '')
+        env['LD_LIBRARY_PATH'] = (
+            f'{_LLAMA_SERVER_LIB_DIR}:{existing}' if existing else _LLAMA_SERVER_LIB_DIR
+        )
+
     try:
         proc = subprocess.Popen(
             cmd,
             stdout=log_file,
             stderr=log_file,
             start_new_session=True,
+            env=env,
         )
     except Exception as exc:
         log_file.close()
@@ -508,7 +537,8 @@ def api_run_model():
         **{k: data[k] for k in (
             'ctx_size', 'temp', 'top_p', 'top_k', 'min_p',
             'presence_penalty', 'repeat_penalty',
-            'cache_type_k', 'cache_type_v', 'n_gpu_layers', 'speculative_decoding'
+            'cache_type_k', 'cache_type_v', 'n_gpu_layers', 'speculative_decoding',
+            'enable_thinking',
         ) if k in data},
     }
 
